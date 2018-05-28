@@ -18,7 +18,7 @@ Usage: run from the command line as such:
     python3 data_loader.py train --dataset=/path/to/dataset/ --model=last
 
     # Run evaluatoin on the last model you trained
-    python3 data_loader.py evaluate --dataset=/path/to/coco/ --model=last
+    python3 data_loader.py evaluate --dataset=/path/to/dataset/ --model=last
 """
 
 import os
@@ -27,9 +27,12 @@ import numpy as np
 
 from detection_net.tdata_provider import BrainVolumeDataProvider as DataProvider
 
+from pycocotools import mask as maskUtils
+
 import zipfile
 import urllib.request
 import shutil
+import h5py
 
 from config import Config
 import utils
@@ -76,6 +79,35 @@ class DataConfig(Config):
 ############################################################
 
 class MSDataset(utils.Dataset):
+      def load_data(self, dataset_dir, config, class_ids=None,
+                  class_map=None, return_object=False):
+        """Load a subset of the dataset.
+        dataset_dir: The root directory of the dataset.
+        subset: What to load (train, val)
+        class_ids: TODO: If provided, only loads images that have the given classes.
+        class_map: TODO: Not implemented yet. Supports maping classes from
+            different datasets to the same class ID.
+        return_object: TODO: If True, returns the object.
+        """
+        f = h5py(join(dataset_dir, 'det_data.h5py'))
+        subject_list = list(f.keys())
+        self._mode = config.get('mode')
+        self._shuffle = config.get('shuffle', True)
+        self._subjects = np.asarray(subject_list)
+        self._subjects = [i[4:] for i in self._subjects]
+        self._nb_folds = config.get('nb-folds', 10)
+
+        fold_length = len(self._subjects) // self._nb_folds
+        self._subjects = self._rotate(self._subjects, config.get('fold', 0) * fold_length)
+        train_idx = (self._nb_folds - 2) * fold_length
+        valid_idx = (self._nb_folds - 1) * fold_length
+        if self._mode == 'train':
+            self._subjects = self._subjects[:train_idx]
+        elif self._mode == 'valid':
+            self._subjects = self._subjects[train_idx:valid_idx]
+        elif self._mode == 'test':
+            self._subjects = self._subjects[valid_idx:]
+
     def load_mask(self, image_id):
         """Load instance masks for the given image.
 
@@ -168,11 +200,11 @@ class MSDataset(utils.Dataset):
 
 
 ############################################################
-#  COCO Evaluation
+#  Evaluation
 ############################################################
 
-def build_coco_results(dataset, image_ids, rois, class_ids, scores, masks):
-    """Arrange resutls to match COCO specs in http://cocodataset.org/#format
+def build_results(dataset, image_ids, rois, class_ids, scores, masks):
+    """Arrange resutls 
     """
     # If no results, return an empty list
     if rois is None:
@@ -198,9 +230,9 @@ def build_coco_results(dataset, image_ids, rois, class_ids, scores, masks):
     return results
 
 
-def evaluate_coco(model, dataset, eval_type="bbox", limit=0, image_ids=None):
-    """Runs official COCO evaluation.
-    dataset: A Dataset object with valiadtion data
+def evaluate(model, dataset, eval_type="bbox", limit=0, image_ids=None):
+    """Runs official evaluation.
+    dataset: A Dataset object with validation data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
     limit: if not 0, it's the number of images to use for evaluation
     """
@@ -228,7 +260,7 @@ def evaluate_coco(model, dataset, eval_type="bbox", limit=0, image_ids=None):
         t_prediction += (time.time() - t)
 
         # Convert results to COCO format
-        image_results = build_coco_results(dataset, subj_ids[i:i + 1],
+        image_results = build_coco_results(dataset, image_ids[i:i + 1],
                                            r["rois"], r["class_ids"],
                                            r["scores"], r["masks"])
         results.extend(image_results)
@@ -238,7 +270,7 @@ def evaluate_coco(model, dataset, eval_type="bbox", limit=0, image_ids=None):
 
     # Evaluate
     Eval = eval(results, eval_type)
-    Eval.params.imgIds = subj_ids
+    Eval.params.imgIds = image_ids
     Eval.evaluate()
     Eval.accumulate()
     Eval.summarize()
@@ -248,9 +280,9 @@ def evaluate_coco(model, dataset, eval_type="bbox", limit=0, image_ids=None):
     print("Total time: ", time.time() - t_start)
 
 
-############################################################
-#  Training
-############################################################
+#################################################################
+#  Training - Possibly will start with COCO pretrained weights??
+#################################################################
 
 
 if __name__ == '__main__':
@@ -262,20 +294,24 @@ if __name__ == '__main__':
     parser.add_argument("command",
                         metavar="<command>",
                         help="'train' or 'evaluate'")
-    parser.add_argument('--dataset', required=True,
+    parser.add_argument('-d', '--dataset', required=True,
                         metavar="/path/to/mslaq.h5",
                         help='Directory of the dataset')
-    parser.add_argument('--model', required=False,
-                        metavar="/path/to/weights.pth",
+    #Will probably get rid of this:
+    parser.add_argument('-c', '--config', required=True,
+                        metavar="-c /path/to/config.json",
+                        help='json Configuration File')
+    parser.add_argument('-m', '--model', required=False,
+                        metavar="-m /path/to/weights.pth",
                         help="Path to weights .pth file")
-    parser.add_argument('--logs', required=False,
+    parser.add_argument('-l' '--logs', required=False,
                         default=DEFAULT_LOGS_DIR,
-                        metavar="/path/to/logs/",
+                        metavar="-l /path/to/logs/",
                         help='Logs and checkpoints directory (default=logs/)')
     parser.add_argument('--limit', required=False,
-                        default=100,
+                        default=50,
                         metavar="<image count>",
-                        help='Images to use for evaluation (default=100)')
+                        help='Images to use for evaluation (default=50)')
     
     args = parser.parse_args()
     print("Command: ", args.command)
@@ -315,33 +351,49 @@ if __name__ == '__main__':
     else:
         model_path = ""
 
+    
     # Load weights
     print("Loading weights ", model_path)
     model.load_weights(model_path)
 
     # Training and validation datasets. Later: for training use the training set and 35K from the
     # validation set, as as in the Mask RCNN paper.
+    '''
     train_ds = DataProvider(expt_cfg['data_path'],
                             {'mode': 'train', 'shuffle': True if expt_cfg['shuffle'] is 1 else False})
     valid_ds = DataProvider(expt_cfg['data_path'], {'mode': 'valid', 'shuffle': False})
     train_gen = train_ds.get_generator(expt_cfg['batch_size'], expt_cfg['nb_epochs'])
     valid_gen = valid_ds.get_generator(expt_cfg['batch_size'], expt_cfg['nb_epochs'])
+    
+    train_set = Dataset(train_dataset, self.config, augment=True)
+    val_set = Dataset(val_dataset, self.config, augment=True)
+    '''
 
+   
     # Train or evaluate
     if args.command == "train":
-        # *** This training schedule is an example. Update to your needs ***
+        # Training dataset (possibly modify so some examples come from validation set as in MaskRCNN paper)
+
+        dataset_train = MSDataset()
+        dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': True if expt_cfg['shuffle'] is 1 else False})
+        dataset_train.prepare()
+
+        # Validation dataset
+        dataset_val = MSDataset()
+        dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': False})
+        dataset_val.prepare()
 
         # Training - Stage 1
         print("Training network heads")
-        model.train_model(train_gen, valid_gen,
+        model.train_model(train_generator, valid_generator, data_path,
                     learning_rate=config.LEARNING_RATE,
                     epochs=40,
-                    layers='heads')
+                    layers='heads', config)
 
         # Training - Stage 2
         # Finetune layers from ResNet stage 4 and up
         print("Fine tune Resnet stage 4 and up")
-        model.train_model(train_gen, valid_gen,
+        model.train_model(train_generator, valid_generator, data_path,
                     learning_rate=config.LEARNING_RATE,
                     epochs=120,
                     layers='4+')
@@ -349,16 +401,19 @@ if __name__ == '__main__':
         # Training - Stage 3
         # Fine tune all layers
         print("Fine tune all layers")
-        model.train_model(train_gen, valid_gen,
+        model.train_model(train_generator, valid_generator, data_path,
                     learning_rate=config.LEARNING_RATE / 10,
                     epochs=160,
                     layers='all')
 
     elif args.command == "evaluate":
-        # Use validation dataset
+        # Validation dataset
+        dataset_val = MSDataset()
+        dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': False})
+        dataset_val.prepare()
         print("Running evaluation on {} images.".format(args.limit))
-        evaluate(model, valid_gen, "bbox", limit=int(args.limit))
-        evaluate(model, valid_gen, "segm", limit=int(args.limit))
+        evaluate(model, valid_generator, "bbox", limit=int(args.limit))
+        evaluate(model, valid_generator, "segm", limit=int(args.limit))
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))

@@ -68,29 +68,10 @@ class Dataset(object):
     """
 
     def __init__(self, h5_path, config, class_map=None):
+     
+    def __init__(self, class_map=None):
         self._image_ids = []
         self.image_info = []
-        self._r = H5Reader(h5_path, 'brains', tuple(config.get('modalities', [0, 1, 2])))
-        self._mode = config.get('mode')
-        self._shuffle = config.get('shuffle', True)
-        self._augment = config.get('augment', False)
-        self._subjects = self._r.get_subjects()
-        self._nb_folds = config.get('nb-folds', 10)
-
-        fold_length = len(self._subjects) // self._nb_folds
-        if self._shuffle:
-            shuffle(self._subjects)
-        self._subjects = self._rotate(self._subjects, config.get('fold', 0) * fold_length)
-        train_idx = (self._nb_folds - 2) * fold_length
-        valid_idx = (self._nb_folds - 1) * fold_length
-        if self._mode == 'train':
-            self._subjects = self._subjects[:train_idx]
-        elif self._mode == 'valid':
-            self._subjects = self._subjects[train_idx:valid_idx]
-        elif self._mode == 'test':
-            self._subjects = self._subjects[valid_idx:]
-        elif self._mode == 'all':
-            self.subjects = self._subjects
         # Background is always the first class
         self.class_info = [{"source": "", "id": 0, "name": "BG"}]
         self.source_class_ids = {}
