@@ -176,7 +176,7 @@ class Dataset(object):
         """
         return self.image_info[image_id]["path"]
 
-    def load_image(self, image_id):
+    def load_image(self, image_id, slice_id):
         """Load the specified image and return a [H,W,3] Numpy array.
         """
         # Load image

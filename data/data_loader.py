@@ -81,7 +81,9 @@ class DataConfig(Config):
 class MSDataset(utils.Dataset):
       def load_data(self, dataset_dir, config, class_ids=None,
                   class_map=None, return_object=False):
-        """Load a subset of the dataset.
+        """ TODO: Remove this and fix model.Dataset
+
+        Load a subset of the dataset. TODO: Remove this and fix model.Dataset
         dataset_dir: The root directory of the dataset.
         subset: What to load (train, val)
         class_ids: TODO: If provided, only loads images that have the given classes.
@@ -111,9 +113,8 @@ class MSDataset(utils.Dataset):
     def load_mask(self, image_id):
         """Load instance masks for the given image.
 
-        Different datasets use different ways to store masks. This
-        function converts the different mask format to one format
-        in the form of a bitmap [height, width, instances].
+        Given image should have lesion masks. This function converts the mask format to 
+        format the form of a bitmap [height, width, instances].
 
         Returns:
         masks: A bool array of shape [height, width, instance count] with

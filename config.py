@@ -32,6 +32,9 @@ class Config(object):
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
 
+    # Number of dimensions to train on (2 or 3). 2 will just train on a slice-by slice basis.
+    BRAIN_DIMENSIONS = 2
+
     # Number of images to train with on each GPU. A 12GB GPU can typically
     # handle 2 images of 1024x1024px.
     # Adjust based on your GPU memory and image sizes. Use the highest
