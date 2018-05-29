@@ -1355,15 +1355,30 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, image_index):
         # Get GT bounding boxes and masks for image.
         image_id = self.image_ids[image_index]
-        image, image_metas, gt_class_ids, gt_boxes, gt_masks = \
+        image, gt_class_ids, gt_boxes, gt_masks = \
             load_image_gt(self.dataset, self.config, image_id, augment=self.augment,
                           use_mini_mask=self.config.USE_MINI_MASK)
 
         # Skip images that have no instances. This can happen in cases
-        # where we train on a subset of classes and the image doesn't
+        # where we train on 2D slices and a particular slice doesn't
         # have any of the classes we care about.
         if not np.any(gt_class_ids > 0):
             return None
+
+        # Get uncertainty measures and netseg
+        key_list = list(dataset.keys())
+        list_idx = key_list[image_index]
+
+        if self.config.BRAIN_DIMENSIONS == 2:
+            #Going to just try looking at a random slice for now
+            slice_idx = random.randint(0,63)
+        else:
+            slice_idx = :   
+        netseg = np.asarray(dataset[list_idx][list(f[list_idx].keys())[0]]) [:,:,slice_idx]
+        uncent = np.asarray(dataset[list_idx][list(f[list_idx].keys())[3]]) [:,:,slice_idx]
+        uncmcvar = np.asarray(dataset[list_idx][list(f[list_idx].keys())[4]]) [:,:,slice_idx]
+        uncmi = np.asarray(dataset[list_idx][list(f[list_idx].keys())[5]]) [:,:,slice_idx]
+        uncprvar = np.asarray(dataset[list_idx][list(f[list_idx].keys())[6]]) [:,:,slice_idx]
 
         # RPN Targets
         rpn_match, rpn_bbox = build_rpn_targets(image.shape, self.anchors,
@@ -1390,6 +1405,7 @@ class Dataset(torch.utils.data.Dataset):
         gt_boxes = torch.from_numpy(gt_boxes).float()
         gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2, 0, 1)).float()
 
+        #Return all images 
         return images, image_metas, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks
 
     def __len__(self):
@@ -1734,7 +1750,7 @@ class MaskRCNN(nn.Module):
 
             return [rpn_class_logits, rpn_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask]
 
-    def train_model(self, train_generator, val_generator, data_path, learning_rate, epochs, layers):
+    def train_model(self, train_dataset, val_dataset, data_path, learning_rate, epochs, layers):
         """Train the model.
         train_dataset, val_dataset: Training and validation Dataset objects.
         learning_rate: The learning rate to train with

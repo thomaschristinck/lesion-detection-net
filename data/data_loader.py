@@ -92,23 +92,29 @@ class MSDataset(utils.Dataset):
         return_object: TODO: If True, returns the object.
         """
         f = h5py(join(dataset_dir, 'det_data.h5py'))
-        subject_list = list(f.keys())
+        image_ids = list(f.keys())
         self._mode = config.get('mode')
         self._shuffle = config.get('shuffle', True)
-        self._subjects = np.asarray(subject_list)
-        self._subjects = [i[4:] for i in self._subjects]
+        self._image_ids = np.asarray(image_ids)
+        self._image_ids = [i[4:] for i in self._subjects]
         self._nb_folds = config.get('nb-folds', 10)
 
-        fold_length = len(self._subjects) // self._nb_folds
-        self._subjects = self._rotate(self._subjects, config.get('fold', 0) * fold_length)
+        fold_length = len(self._image_ids) // self._nb_folds
+        self._image_ids = self._rotate(self._image_ids, config.get('fold', 0) * fold_length)
         train_idx = (self._nb_folds - 2) * fold_length
         valid_idx = (self._nb_folds - 1) * fold_length
         if self._mode == 'train':
-            self._subjects = self._subjects[:train_idx]
+            self._subjects = self._image_ids[:train_idx]
         elif self._mode == 'valid':
-            self._subjects = self._subjects[train_idx:valid_idx]
+            self._subjects = self._image_ids[train_idx:valid_idx]
         elif self._mode == 'test':
-            self._subjects = self._subjects[valid_idx:]
+            self._subjects = self._image_ids[valid_idx:]
+
+        class_ids = ['small', 'medium', 'large']
+        for size, idx in enumerate(class_ids):
+            self.add_class("MSLAQ", idx, size)
+        for i in image_ids:
+            self.add_image("MSLAQ", image_id=i, path = os.path.join(dataset_dir, i))
 
     def load_mask(self, image_id):
         """Load instance masks for the given image.
@@ -160,14 +166,6 @@ class MSDataset(utils.Dataset):
         else:
             # Call super class to return an empty mask
             return super(CocoDataset, self).load_mask(image_id)
-
-    def image_reference(self, image_id):
-        """Return a link to the image in the COCO Website."""
-        info = self.image_info[image_id]
-        if info["source"] == "coco":
-            return "http://cocodataset.org/#explore?id={}".format(info["id"])
-        else:
-            super(CocoDataset, self).image_reference(image_id)
 
     # The following two functions are from pycocotools with a few changes.
 
@@ -381,12 +379,12 @@ if __name__ == '__main__':
 
         # Validation dataset
         dataset_val = MSDataset()
-        dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': False})
+        dataset_val.load_data(args.dataset, {'mode': 'train', 'shuffle': False})
         dataset_val.prepare()
 
         # Training - Stage 1
         print("Training network heads")
-        model.train_model(train_generator, valid_generator, data_path,
+        model.train_model(dataset_train, dataset_val, data_path,
                     learning_rate=config.LEARNING_RATE,
                     epochs=40,
                     layers='heads', config)
