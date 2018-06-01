@@ -13,6 +13,7 @@ import math
 import os
 import random
 import re
+import pdb
 
 import numpy as np
 import torch
@@ -22,10 +23,14 @@ import torch.optim as optim
 import torch.utils.data
 from torch.autograd import Variable
 
+from scipy import ndimage
+
 import utils
 import visualize
 from nms.nms_wrapper import nms
 from roialign.roi_align.crop_and_resize import CropAndResizeFunction
+
+import matplotlib.pyplot as plt
 
 
 ############################################################
@@ -1160,9 +1165,14 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	"""
 	# Load t2 image, uncertainties, and mask
 	t2_image = dataset.load_t2_image(image_id, dataset, config)
-	net_mask, gt_mask = dataset.load_masks(image_id, dataset, config)
+	net_mask, gt_mask, class_ids = dataset.load_masks(image_id, dataset, config)
 	uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
 	
+	labels = {}
+	nles ={}
+	labels, nles = ndimage.label(gt_mask)
+	print('original num lesions & sum of gt_mask', nles, np.sum(gt_mask))
+
 	shape = t2_image.shape
 	
 	t2_image, window, scale, padding = utils.resize_image(
@@ -1172,33 +1182,53 @@ def load_image_gt(dataset, config, image_id, augment=False,
 		padding=config.IMAGE_PADDING,
 		dims=config.BRAIN_DIMENSIONS)
 
+	uncmcvar, window, scale, padding = utils.resize_image(
+		uncmcvar,
+		min_dim=config.IMAGE_MIN_DIM,
+		max_dim=config.IMAGE_MAX_DIM,
+		padding=config.IMAGE_PADDING,
+		dims=config.BRAIN_DIMENSIONS)
+
 	dims=config.BRAIN_DIMENSIONS
-	gt_mask = utils.resize_mask(gt_mask, scale, padding, dims)
-	net_mask = utils.resize_mask(net_mask, scale, padding, dims)
+	#gt_mask = utils.resize_mask(gt_mask, scale, padding, dims)
+	#net_mask = utils.resize_mask(net_mask, scale, padding, dims)
 
 	# Random horizontal flips.
+	'''
 	if augment:
 		if random.randint(0, 1):
 			t2_image = np.fliplr(t2_image)
+			uncmcvar = np.fliplr(uncmcvar)
 			net_mask = np.fliplr(net_mask)
 			gt_mask = np.fliplr(gt_mask)
 			uncmcvar = np.fliplr(uncmcvar)
-			
+	'''		
 
 	# Bounding boxes. Note that some boxes might be all zeros
 	# if the corresponding mask got cropped out.
 	# bbox: [num_instances, (y1, x1, y2, x2)]
-	bbox = utils.extract_bboxes(gt_mask, dims)
+	bbox = utils.extract_bboxes(gt_mask, class_ids, dims, sm_buf = 1, med_buf = 2, lar_buf = 4)
+
+	img = gt_mask
+
+	for les in range(1, nles + 1):
+		if class_ids[les] == 1:
+			img = visualize.draw_box(gt_mask, bbox[les, :4], color=0.2)
+		elif class_ids[les] == 2:
+			img = visualize.draw_box(gt_mask, bbox[les, :4], color=0.4)
+		elif class_ids[les] == 3:
+			img = visualize.draw_box(gt_mask, bbox[les, :4], color=0.7)
+  
+	imgplt = plt.imshow(img)
+	plt.show()
 
 	# Resize masks to smaller size to reduce memory usage
 	if use_mini_mask:
-		gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims, dataset._slice_index)
-		net_mask = utils.minimize_mask(bbox, net_mask, config.MINI_MASK_SHAPE, dims, dataset._slice_index)
+		gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
+		#net_mask = utils.minimize_mask(bbox, net_mask, config.MINI_MASK_SHAPE, dims)
 
-	# Image meta data
-	image_meta = compose_image_meta(image_id, shape, window)
 
-	return t2_image, image_meta, uncmcvar, class_ids, bbox, net_mask, gt_mask
+	return t2_image, uncmcvar, class_ids, bbox, net_mask, gt_mask
 
 def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
 	"""Given the anchors and GT boxes, compute overlaps and identify positive
@@ -1237,7 +1267,7 @@ def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
 		no_crowd_bool = np.ones([anchors.shape[0]], dtype=bool)
 
 	# Compute overlaps [num_anchors, num_gt_boxes]
-	overlaps = utils.compute_overlaps(anchors, gt_boxes)
+	overlaps = utils.compute_2D_overlaps(anchors, gt_boxes)
 
 	# Match anchors to GT Boxes
 	# If an anchor overlaps a GT box with IoU >= 0.7 then it's positive.
@@ -1356,56 +1386,59 @@ class Dataset(torch.utils.data.Dataset):
 												 config.RPN_ANCHOR_STRIDE)
 
 	def __getitem__(self, image_index):
+
+		#pdb.set_trace()
 		# Get GT bounding boxes and masks for image.
 		image_id = self._image_ids[image_index]
-		image, gt_class_ids, gt_boxes, gt_masks = \
+		t2_image, uncmcvar, gt_class_ids, gt_boxes, net_masks, gt_masks = \
 			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
 						  use_mini_mask=self._config.USE_MINI_MASK)
 
-		print('Image shape & size:')
 		# Skip images that have no instances. This can happen in cases
 		# where we train on 2D slices and a particular slice doesn't
 		# have any of the classes we care about.
 		if not np.any(gt_class_ids > 0):
 			return None
 
-		#if self._config.BRAIN_DIMENSIONS == 2:
-			#Going to just try looking at a random slice for now
-			#slice_idx = random.randint(0,63)
-		#else:
-		#	slice_idx = ...   
-
-
 		# RPN Targets
-		rpn_match, rpn_bbox = build_rpn_targets(image.shape, self._anchors,
+		rpn_match, rpn_bbox = build_rpn_targets(t2_image.shape, self._anchors,
 												gt_class_ids, gt_boxes, self._config)
 
-		# If more instances than fits in the array, sub-sample from them.
+		# If more instances than fits in the array, sub-sample from them. FIX later
 		if gt_boxes.shape[0] > self._config.MAX_GT_INSTANCES:
 			ids = np.random.choice(
 				np.arange(gt_boxes.shape[0]), self._config.MAX_GT_INSTANCES, replace=False)
 			gt_class_ids = gt_class_ids[ids]
 			gt_boxes = gt_boxes[ids]
-			gt_masks = gt_masks[:, :, ids]
+			gt_masks = gt_masks
+
+		gt_masks = gt_masks.astype(np.int16)
 
 		# Add to batch
 		rpn_match = rpn_match[:, np.newaxis]
-		images = mold_image(image.astype(np.float32), self._config)
+		t2_image = mold_image(t2_image.astype(np.float32), self._config)
+		uncmcvar = mold_image(uncmcvar.astype(np.float32), self._config)
 
 		# Convert
-		if self._config.BRAIN_DIMENSIONS == 2:
-			t2 = t2.transpose(2,0,1)
-			gt_masks = gt_masks.transpose
+		if self._config.BRAIN_DIMENSIONS == 3:
+			t2_image = t2_image.transpose(2, 0, 1)
+			uncmcvar = uncmcvar.transpose(2, 0, 1)
+			gt_masks = gt_masks.transpose(2, 0, 1)
 
-		images = torch.from_numpy(images.transpose(2, 0, 1)).float()
+		#t2_image = torch.from_numpy(t2_images.transpose(2, 0, 1)).float()
+		#print(gt_masks.dtype)
+		t2_image = torch.from_numpy(t2_image).float()
+		uncmcvar = torch.from_numpy(uncmcvar).float()
 		rpn_match = torch.from_numpy(rpn_match)
 		rpn_bbox = torch.from_numpy(rpn_bbox).float()
 		gt_class_ids = torch.from_numpy(gt_class_ids)
 		gt_boxes = torch.from_numpy(gt_boxes).float()
-		gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2, 0, 1)).float()
+		#gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2, 0, 1)).float()
+		#gt_masks = torch.from_numpy(gt_masks)
+		#net_masks = torch.from_numpy(net_masks).float()
 
-		#Return all images 
-		return images, image_metas, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks
+		#Return all images
+		return t2_image, uncmcvar, rpn_match, rpn_bbox, gt_class_ids
 
 	def __len__(self):
 		return self._image_ids.shape[0]
@@ -2003,7 +2036,6 @@ class MaskRCNN(nn.Module):
 			original image (padding excluded).
 		"""
 		molded_images = []
-		image_metas = []
 		windows = []
 		for image in images:
 			# Resize image to fit the model expected size
@@ -2014,19 +2046,15 @@ class MaskRCNN(nn.Module):
 				max_dim=self.config.IMAGE_MAX_DIM,
 				padding=self.config.IMAGE_PADDING)
 			molded_image = mold_image(molded_image, self.config)
-			# Build image_meta
-			image_meta = compose_image_meta(
-				0, image.shape, window,
-				np.zeros([self.config.NUM_CLASSES], dtype=np.int32))
+			
 			# Append
 			molded_images.append(molded_image)
 			windows.append(window)
-			image_metas.append(image_meta)
+	
 		# Pack into arrays
 		molded_images = np.stack(molded_images)
-		image_metas = np.stack(image_metas)
 		windows = np.stack(windows)
-		return molded_images, image_metas, windows
+		return molded_images, windows
 
 	def unmold_detections(self, detections, mrcnn_mask, image_shape, window):
 		"""Reformats the detections of one image from the format of the neural
@@ -2093,7 +2121,7 @@ class MaskRCNN(nn.Module):
 ############################################################
 #  Data Formatting
 ############################################################
-
+''' TODO : Possibly add later
 def compose_image_meta(image_id, image_shape, window, active_class_ids):
 	"""Takes attributes of an image and puts them in one 1D array. Use
 	parse_image_meta() to parse the values back.
@@ -2113,6 +2141,7 @@ def compose_image_meta(image_id, image_shape, window, active_class_ids):
 		list(active_class_ids)  # size=num_classes
 	)
 	return meta
+'''
 
 
 # Two functions (for Numpy and TF) to parse image_meta tensors.

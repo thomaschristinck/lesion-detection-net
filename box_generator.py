@@ -45,20 +45,21 @@ def bounding_boxes(t, t2, sm_buf, med_buf, lar_buf):
 
     labels = {}
     nles = {}
-    labels['t'], nles['t'] = ndimage.label(t)
-    boxes = np.zeros([nles['t'] + 1, 6], dtype=np.int32)
-    classes = np.zeros([nles['t'] + 1, 1], dtype=np.int32)
-    nb_lesions = nles['t']
+    labels, nles = ndimage.label(t)
+    print('Number of lesions', nles)
+    boxes = np.zeros([nles + 1, 6], dtype=np.int32)
+    classes = np.zeros([nles + 1, 1], dtype=np.int32)
+    nb_lesions = nles
 
     # Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
-    for i in range(1, nles['t'] + 1):
+    for i in range(1, nles + 1):
         
        
-        t[labels['t'] != i] = 0
-        t[labels['t'] == i] = 1
+        t[labels != i] = 0
+        t[labels == i] = 1
  
         # Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
-        lesion_size = np.sum(t[labels['t'] == i])
+        lesion_size = np.sum(t[labels == i])
         classes[i, 0] = get_lesion_bin(lesion_size)
         
         x_indicies = np.where(np.any(t, axis=0))[0]
@@ -90,26 +91,28 @@ def bounding_boxes(t, t2, sm_buf, med_buf, lar_buf):
 
     # Reset ground truth mask and then we can draw boxes
     for i in range(1, nb_lesions + 1):
-        t[labels['t'] == i] = 1
+        t[labels == i] = 1
     
     
-    for les in range(nles['t']):
-        if 35 in range(boxes[les, 4], boxes[les, 5]):
+    for brain_slice in range(18, 50):
+        for les in range(1, nles + 1):
+            if brain_slice in range(boxes[les, 4], boxes[les, 5]):
 
-            #img2 = visualize.draw_boxes(t2[:,:,35], boxes=boxes[les, 0:4], masks=t[:,:,35])
+                #img2 = visualize.draw_boxes(t2[:,:,35], boxes=boxes[les, 0:4], masks=t[:,:,35])
 
-            if classes[les] == 0:
-                img = visualize.draw_box(t[:,:,35], boxes[les, 0:4], color=0.2)
-            elif classes[les] == 1:
-                img = visualize.draw_box(t[:,:,35], boxes[les, 0:4], color=0.4)
+                if classes[les] == 0:
+                    img = visualize.draw_box(t[:,:,brain_slice], boxes[les, 0:4], color=0.2)
+                elif classes[les] == 1:
+                    img = visualize.draw_box(t[:,:,brain_slice], boxes[les, 0:4], color=0.4)
+                else:
+                    img = visualize.draw_box(t[:,:,brain_slice], boxes[les, 0:4], color=0.7)
             else:
-                img = visualize.draw_box(t[:,:,35], boxes[les, 0:4], color=0.7)
-        else:
-            img = t[:,:,35]
+                img = t[:,:,brain_slice]
   
-    imgplt = plt.imshow(img)
-    plt.show()
-    plt.savefig('slice.pdf')
+        imgplt = plt.imshow(img)
+        print(brain_slice)
+        plt.show()
+        plt.savefig('slice.pdf')
     return {'classes': classes, 'boxes': boxes}
 
 

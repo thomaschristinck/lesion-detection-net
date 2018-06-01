@@ -5,7 +5,6 @@ import math
 import random
 import numpy as np
 import scipy.misc
-import scipy.ndimage
 import skimage.color
 import skimage.io
 import torch
@@ -15,40 +14,56 @@ from os.path import join
 from scipy import ndimage
 
 
+import matplotlib.pyplot as plt
+
+'''
+TODO:
+- Easy: fix clas_ids for 2D case, where classes are indexed according to a slice (we can still use the voxel criteria on slices for 2D)
+- Hard: fix torch.from_numpy conversion memory resizing error
+- Medium: make sure resizing does not distort data (lesion mask and t2 images still allign for ex.)
+'''
 ############################################################
 #  Bounding Boxes
 ############################################################
+def get_lesion_bin(nvox):
+	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
+	if 3 <= nvox <= 10:
+		return 1
+	elif 11 <= nvox <= 50:
+		return 2
+	elif nvox >= 51:
+		return 3
+	else:
+		return 1
 
-def extract_bboxes(mask, dims):
+def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	"""Compute bounding boxes from masks.
 	mask: [height, width, slice]. Mask pixels are either 1 or 0.
 
 	Returns: if 2D - bbox array [num_instances, (y1, x1, y2, x2, class_id)].
 			if 3D - bbox array [num_instances, (y1, x1, y2, x2, class_id)].
 	"""
+
 	labels = {}
 	nles = {}
-	labels['t'], nles['t'] = ndimage.label(mask)
-	boxes = np.zeros([nles['t'] + 1, 7], dtype=np.int32)
-	classes = np.zeros([nles['t'] + 1, 1], dtype=np.int32)
-	nb_lesions = nles['t']
+	labels, nles = ndimage.label(mask)
+	boxes = np.zeros([nles + 1, 6], dtype=np.int32)
+	nb_lesions = nles
+	print('True number of lesions : ', nb_lesions)
 
-	print('Lesion numbers: ', nb_lesions)
-  	# Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
-	for i in range(1, nles['t'] + 1):
+	# Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
+	for i in range(1, nles + 1):
 		
-	   
-		mask[labels['t'] != i] = 0
-		mask[labels['t'] == i] = 1
+		mask[labels != i] = 0
+		mask[labels == i] = 1
  
 		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
-		lesion_size = np.sum(mask[labels['t'] == i])
-		classes[i, 0] = get_lesion_bin(lesion_size)
-		print('Lesion size: ', lesion_size)
+		lesion_size = np.sum(mask[labels == i])
+
 		x_indicies = np.where(np.any(mask, axis=0))[0]
 		y_indicies = np.where(np.any(mask, axis=1))[0]
 		z_indicies =[]
-		for lesion_slice in range(t.shape[-1]):
+		for lesion_slice in range(mask.shape[-1]):
 			if np.any(mask[...,lesion_slice]):
 				z_indicies.append(lesion_slice)
 		z_indicies = np.asarray(z_indicies)
@@ -70,8 +85,13 @@ def extract_bboxes(mask, dims):
 			# No mask for this instance
 			x1, x2, y1, y2, z1, z2 = 0, 0, 0, 0, 0, 0
 	   
-		boxes[i] = np.array([y1, x1, y2, x2, z1, z2, classes[i]])
+		boxes[i] = np.array([y1, x1, y2, x2, z1, z2])
 	
+	# Reset ground truth mask and then we can draw boxes
+
+	for i in range(1, nb_lesions + 1):
+		mask[labels == i] = 1
+
 	if dims == 2:
 		boxes = np.delete(boxes, 4, 1)
 		boxes = np.delete(boxes, 4, 1)
@@ -79,6 +99,29 @@ def extract_bboxes(mask, dims):
 		return boxes.astype(np.int32)
 	else:
 		return boxes.astype(np.int32)
+
+
+
+def remove_tiny_les(lesion_image, nvox=2):
+	labels, nles = ndimage.label(lesion_image)
+	class_ids = np.zeros([nles + 1, 1], dtype=np.int32)
+
+	for i in range(1, nles + 1):
+		nb_vox = np.sum(lesion_image[labels == i])
+		if nb_vox <= nvox:
+			lesion_image[labels == i] = 0
+
+		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
+		lesion_image[labels != i] = 0
+		lesion_image[labels == i] = 1
+		lesion_size = np.sum(lesion_image[labels == i])
+		class_ids[i, 0] = get_lesion_bin(lesion_size)
+
+	# Reset ground truth mask
+	for i in range(1, nles + 1):
+		lesion_image[labels == i] = 1
+
+	return lesion_image, class_ids
 
 def compute_2D_iou(box, boxes, box_area, boxes_area):
 	"""Calculates IoU of the given box with the array of the given boxes.
@@ -116,7 +159,7 @@ def compute_2D_overlaps(boxes1, boxes2):
 	overlaps = np.zeros((boxes1.shape[0], boxes2.shape[0]))
 	for i in range(overlaps.shape[1]):
 		box2 = boxes2[i]
-		overlaps[:, i] = compute_iou(box2, boxes1, area2[i], area1)
+		overlaps[:, i] = compute_2D_iou(box2, boxes1, area2[i], area1)
 	return overlaps
 
 def box_2D_refinement(box, gt_box):
@@ -170,7 +213,7 @@ class Dataset(object):
 
 		if BRAIN_DIMENSIONS == 2:
 			#Going to just try looking at a random slice for now
-			slice_idx = random.randint(0,63)
+			slice_idx = random.randint(15,50)
 			self._slice_idx = slice_idx
 		else:
 			slice_idx = ...  
@@ -230,12 +273,6 @@ class Dataset(object):
 	def image_ids(self):
 		return self._image_ids
 
-	def source_image_link(self, image_id):
-		"""Returns the path or URL to the image.
-		Override this to return a URL to the image if it's availble online for easy
-		debugging.
-		"""
-		return self.image_info[image_id]["path"]
 
 	def load_t2_image(self, image_id, dataset, config):
 		"""Load the specified image and return a [H,W] Numpy array.
@@ -280,10 +317,15 @@ class Dataset(object):
 		net_mask, opts = nrrd.read(net_mask_file)
 		gt_mask, opts = nrrd.read(gt_mask_file)
 
-		net_mask = np.asarray(net_mask)[:,:,self._slice_index]
-		gt_mask = np.asarray(gt_mask)[:,:,self._slice_index]
+		gt_mask = np.asarray(gt_mask)
 
-		return net_mask, gt_mask
+		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
+		net_mask = np.asarray(net_mask)
+		
+		net_mask = net_mask[:,:,self._slice_index]
+		gt_mask = gt_mask[:,:,self._slice_index]
+
+		return net_mask, gt_mask, class_ids
 
 def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 	"""
@@ -349,8 +391,15 @@ def resize_mask(mask, scale, padding, dims):
 	padding: Padding to add to the mask in the form
 			[(top, bottom), (left, right), (0, 0)]
 	"""
+
+	labels = {}
+	nles = {}
 	if dims == 2:
+		labels, nles = ndimage.label(mask)
+		print('original', nles )
 		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale], order=0)
+		labels, nles = ndimage.label(mask)
+		print('mod', nles )
 	else:
 		# MODIFY later to ensure proper scaling
 		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, scale], order=0)
@@ -359,7 +408,7 @@ def resize_mask(mask, scale, padding, dims):
 	return mask
 
 
-def minimize_mask(bbox, mask, mini_shape, dims, slice_index):
+def minimize_mask(bbox, mask, mini_shape, dims):
 	"""Resize masks to a smaller version to cut memory load.
 	Mini-masks can then resized back to image scale using expand_masks()
 
@@ -367,21 +416,19 @@ def minimize_mask(bbox, mask, mini_shape, dims, slice_index):
 	"""
 	labels = {}
 	nles = {}
-	labels['t'], nles['t'] = ndimage.label(mask)
+	labels, nles = ndimage.label(mask)
 
-	mini_mask = np.zeros(mini_shape + (nles['t'],), dtype=bool)
-	print('Number of lesions :', nles['t'])
-	for i in range(nles['t']):
-		mask[labels['t'] != i] = 0
-		mask[labels['t'] == i] = 1
+	mini_mask = np.zeros(mini_shape + (nles,), dtype=bool)
+
+	for i in range(nles):	
+		mask[labels != i] = 0
+		mask[labels == i] = 1
 		m = mask
 		y1, x1, y2, x2 = bbox[i][:4]
-		print('Sum:', x1, x2, y1, y2)
 		m = m[y1:y2, x1:x2]
-		if m.size == 0:
-			raise Exception("Invalid bounding box with area of zero")
-		m = scipy.misc.imresize(m.astype(float), mini_shape, interp='bilinear')
-		mini_mask[:, :, i] = np.where(m >= 128, 1, 0)
+		if m.size != 0:
+			m = scipy.misc.imresize(m.astype(float), mini_shape, interp='bilinear')
+			mini_mask[:, :, i] = np.where(m >= 128, 1, 0)
 	return mini_mask
 
 

@@ -72,14 +72,12 @@ class MSDataset(utils.Dataset):
 
 		if config.get('dim') == 2:
 			#Going to just try looking at a random slice for now
-			slice_index = random.randint(0, len(config.get('mods')))
+			slice_index = random.randint(0, 63)
 			self._slice_index = slice_index
 		else:
 			slice_idx = ...  
 			self._slice_index = slice_index
 
-
-		print('Slice index : ', self._slice_index)
 
 		fold_length = len(self._image_ids) // self._nb_folds
 		#self._image_ids = self._rotate(self._image_ids, config.get('fold', 0) * fold_length)
@@ -101,6 +99,7 @@ class MSDataset(utils.Dataset):
 		for i in self._image_ids:
 			self.add_image("MSLAQ", image_id=i, path = os.path.join(dataset_dir, i))
 
+	'''
 	def load_mask(self, image_id):
 		"""TODO: Remove this function
 
@@ -153,6 +152,7 @@ class MSDataset(utils.Dataset):
 		else:
 			# Call super class to return an empty mask
 			return super(CocoDataset, self).load_mask(image_id)
+	'''
 
 	# The following two functions are from pycocotools with a few changes.
 
@@ -236,18 +236,18 @@ if __name__ == '__main__':
 	train_set = Dataset(dataset_train, config, augment=True)
 	val_set = Dataset(dataset_val, config, augment=True)
 
-	train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
-	val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=4)
+	train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1)
+	val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=1)
 	
 	print(val_generator)
+	batch_count = 0
 	for inputs in val_generator:
 		batch_count += 1
-		print('Inputs: ', inputs)
-		images = inputs[0]
-		image_metas = inputs[1]
+		t2_images = inputs[0]
+		uncmcvar = inputs[1]
 		rpn_match = inputs[2]
 		rpn_bbox = inputs[3]
-		gt_class_ids = inputs[4]
-		gt_boxes = inputs[5]
-		gt_masks = inputs[6]
-		print(images.shape, images.size)
+		#gt_class_ids = inputs[4]
+		#gt_boxes = inputs[5]
+		#gt_masks = inputs[6]
+		#net_masks = inputs[7]

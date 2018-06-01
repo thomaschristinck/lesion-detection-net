@@ -94,13 +94,16 @@ class Config(object):
     # Images are resized such that the smallest side is >= IMAGE_MIN_DIM and
     # the longest side is <= IMAGE_MAX_DIM. In case both conditions can't
     # be satisfied together the IMAGE_MAX_DIM is enforced.
-    IMAGE_MIN_DIM = 800
-    IMAGE_MAX_DIM = 1024
+    IMAGE_MIN_DIM = 112
+    IMAGE_MAX_DIM = 192
     # If True, pad images with zeros such that they're (max_dim by max_dim)
     IMAGE_PADDING = True  # currently, the False option is not supported
 
     # Image mean (RGB)
-    MEAN_PIXEL = np.array([123.7, 116.8, 103.9])
+    # MEAN_PIXEL = np.array([123.7, 116.8, 103.9])
+
+    # Image mean (BW - approximate for now)
+    MEAN_PIXEL = 116.8
 
     # Number of ROIs per image to feed to classifier/mask heads
     # The Mask RCNN paper uses 512 but often the RPN doesn't generate
@@ -150,7 +153,7 @@ class Config(object):
     # 'Modalities' considered in the network. 'Netseg' refers to lesion segmentation mask provided
     # by another network. 'Target' refers to the target ground truh lesion segmentation mask. The 
     # uncertainty measures are those used in Tanya Nair's BUnet.
-    MODALITIES = ['netseg', 't2', 'target', 'uncent', 'uncmcvar', 'uncmi', 'uncprvar']
+    MODALITIES = ['netseg', 't2', 'target', 'uncmcvar', 'uncent', 'uncmi', 'uncprvar']
 
     # Use RPN ROIs or externally generated ROIs for training
     # Keep this True for most situations. Set to False if you want to train
