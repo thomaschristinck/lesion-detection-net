@@ -25,7 +25,7 @@ TODO:
 ############################################################
 #  Bounding Boxes
 ############################################################
-def get_lesion_bin(nvox):
+def get_3D_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
 	if 3 <= nvox <= 10:
 		return 1
@@ -35,6 +35,17 @@ def get_lesion_bin(nvox):
 		return 3
 	else:
 		return 1
+
+def get_2D_lesion_bin(nvox):
+    # Lesion bin - 0 for small lesions, 1 for medium, 2 for large
+    if 3 <= nvox <= 8:
+        return 1
+    elif 9 <= nvox <= 20:
+        return 2
+    elif nvox >= 21:
+        return 3
+    else:
+        return 1
 
 def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	"""Compute bounding boxes from masks.
@@ -115,7 +126,7 @@ def remove_tiny_les(lesion_image, nvox=2):
 		lesion_image[labels != i] = 0
 		lesion_image[labels == i] = 1
 		lesion_size = np.sum(lesion_image[labels == i])
-		class_ids[i, 0] = get_lesion_bin(lesion_size)
+        class_ids = get_2D_lesion_bin(lesion_size)
 
 	# Reset ground truth mask
 	for i in range(1, nles + 1):
@@ -318,12 +329,12 @@ class Dataset(object):
 		gt_mask, opts = nrrd.read(gt_mask_file)
 
 		gt_mask = np.asarray(gt_mask)
-
-		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
 		net_mask = np.asarray(net_mask)
 		
 		net_mask = net_mask[:,:,self._slice_index]
 		gt_mask = gt_mask[:,:,self._slice_index]
+
+        gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
 
 		return net_mask, gt_mask, class_ids
 
@@ -539,4 +550,3 @@ def generate_pyramid_anchors(scales, ratios, feature_shapes, feature_strides,
 
 
 
-    
