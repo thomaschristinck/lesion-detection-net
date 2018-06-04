@@ -233,10 +233,10 @@ if __name__ == '__main__':
 	dataset_val.load_data(dataset, {'mode': 'val', 'shuffle': False, 'dim': config.BRAIN_DIMENSIONS, 'mods': config.MODALITIES})
 	dataset_val.prepare()
 
-	train_set = Dataset(dataset_train, config, augment=True)
+	#train_set = Dataset(dataset_train, config, augment=True)
 	val_set = Dataset(dataset_val, config, augment=True)
 
-	train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1)
+	#train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1)
 	val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=1)
 	
 	print(val_generator)
@@ -247,7 +247,7 @@ if __name__ == '__main__':
 		uncmcvar = inputs[1]
 		rpn_match = inputs[2]
 		rpn_bbox = inputs[3]
-		#gt_class_ids = inputs[4]
-		#gt_boxes = inputs[5]
-		#gt_masks = inputs[6]
-		#net_masks = inputs[7]
+		gt_class_ids = inputs[4]
+		gt_boxes = inputs[5]
+		gt_masks = inputs[6]
+		net_masks = inputs[7]

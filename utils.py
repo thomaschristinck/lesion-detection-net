@@ -18,9 +18,10 @@ import matplotlib.pyplot as plt
 
 '''
 TODO:
-- Easy: fix clas_ids for 2D case, where classes are indexed according to a slice (we can still use the voxel criteria on slices for 2D)
+X Easy: fix clas_ids for 2D case, where classes are indexed according to a slice (we can still use the voxel criteria on slices for 2D) 
 - Hard: fix torch.from_numpy conversion memory resizing error
 - Medium: make sure resizing does not distort data (lesion mask and t2 images still allign for ex.)
+- Fix NoneType return when there are no lesions
 '''
 ############################################################
 #  Bounding Boxes
@@ -37,15 +38,15 @@ def get_3D_lesion_bin(nvox):
 		return 1
 
 def get_2D_lesion_bin(nvox):
-    # Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-    if 3 <= nvox <= 8:
-        return 1
-    elif 9 <= nvox <= 20:
-        return 2
-    elif nvox >= 21:
-        return 3
-    else:
-        return 1
+	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
+	if 3 <= nvox <= 8:
+		return 1
+	elif 9 <= nvox <= 20:
+		return 2
+	elif nvox >= 21:
+		return 3
+	else:
+		return 1
 
 def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	"""Compute bounding boxes from masks.
@@ -97,7 +98,7 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 			x1, x2, y1, y2, z1, z2 = 0, 0, 0, 0, 0, 0
 	   
 		boxes[i] = np.array([y1, x1, y2, x2, z1, z2])
-	
+		
 	# Reset ground truth mask and then we can draw boxes
 
 	for i in range(1, nb_lesions + 1):
@@ -106,7 +107,7 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	if dims == 2:
 		boxes = np.delete(boxes, 4, 1)
 		boxes = np.delete(boxes, 4, 1)
-		print('Box: ', boxes)
+		print('BBox og shape : ', boxes.shape)
 		return boxes.astype(np.int32)
 	else:
 		return boxes.astype(np.int32)
@@ -126,11 +127,13 @@ def remove_tiny_les(lesion_image, nvox=2):
 		lesion_image[labels != i] = 0
 		lesion_image[labels == i] = 1
 		lesion_size = np.sum(lesion_image[labels == i])
-        class_ids = get_2D_lesion_bin(lesion_size)
+		class_ids[i] = get_2D_lesion_bin(lesion_size)
 
 	# Reset ground truth mask
 	for i in range(1, nles + 1):
 		lesion_image[labels == i] = 1
+
+	class_ids = np.asarray(class_ids)
 
 	return lesion_image, class_ids
 
@@ -317,7 +320,6 @@ class Dataset(object):
 	def load_masks(self, image_id, dataset, config):
 		"""Load lesion masks for the given image (ground truth and network output)
 		"""
-
 		# Get indices
 		nb_mods = len(config.MODALITIES)
 		net_mask_idx = int((image_id // nb_mods) * nb_mods)
@@ -334,7 +336,7 @@ class Dataset(object):
 		net_mask = net_mask[:,:,self._slice_index]
 		gt_mask = gt_mask[:,:,self._slice_index]
 
-        gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
+		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
 
 		return net_mask, gt_mask, class_ids
 
@@ -403,14 +405,8 @@ def resize_mask(mask, scale, padding, dims):
 			[(top, bottom), (left, right), (0, 0)]
 	"""
 
-	labels = {}
-	nles = {}
 	if dims == 2:
-		labels, nles = ndimage.label(mask)
-		print('original', nles )
 		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale], order=0)
-		labels, nles = ndimage.label(mask)
-		print('mod', nles )
 	else:
 		# MODIFY later to ensure proper scaling
 		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, scale], order=0)
@@ -419,18 +415,15 @@ def resize_mask(mask, scale, padding, dims):
 	return mask
 
 
-def minimize_mask(bbox, mask, mini_shape, dims):
+def minimize_mask(bbox, mask, mini_shape, dims, nles, labels):
 	"""Resize masks to a smaller version to cut memory load.
 	Mini-masks can then resized back to image scale using expand_masks()
-
-	See inspect_data.ipynb notebook for more details.
 	"""
-	labels = {}
-	nles = {}
-	labels, nles = ndimage.label(mask)
-
-	mini_mask = np.zeros(mini_shape + (nles,), dtype=bool)
-
+	if nles > 0:
+		mini_mask = np.zeros(mini_shape + (nles,), dtype=bool)
+	else:
+		mini_mask = np.zeros(mini_shape + (1,), dtype=bool)
+	
 	for i in range(nles):	
 		mask[labels != i] = 0
 		mask[labels == i] = 1
@@ -440,14 +433,13 @@ def minimize_mask(bbox, mask, mini_shape, dims):
 		if m.size != 0:
 			m = scipy.misc.imresize(m.astype(float), mini_shape, interp='bilinear')
 			mini_mask[:, :, i] = np.where(m >= 128, 1, 0)
+
 	return mini_mask
 
 
 def expand_mask(bbox, mini_mask, image_shape):
 	"""Resizes mini masks back to image size. Reverses the change
 	of minimize_mask().
-
-	See inspect_data.ipynb notebook for more details.
 	"""
 	mask = np.zeros(image_shape[:2] + (mini_mask.shape[-1],), dtype=bool)
 	for i in range(mask.shape[-1]):
