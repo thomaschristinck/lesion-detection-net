@@ -227,7 +227,7 @@ class Dataset(object):
 
 		if BRAIN_DIMENSIONS == 2:
 			#Going to just try looking at a random slice for now
-			slice_idx = random.randint(15,50)
+			slice_idx = random.randint(20,45)
 			self._slice_idx = slice_idx
 		else:
 			slice_idx = ...  
