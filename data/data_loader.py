@@ -20,25 +20,14 @@ Usage: run from the command line as such:
     # Run evaluatoin on the last model you trained
     python3 data_loader.py evaluate --dataset=/path/to/dataset/ --model=last
 """
-
 import os
 import time
 import numpy as np
-
-from detection_net.tdata_provider import BrainVolumeDataProvider as DataProvider
-
-from pycocotools import mask as maskUtils
-
-import zipfile
-import urllib.request
-import shutil
 import h5py
 
 from config import Config
 import utils
 import model as modellib
-
-import torch
 
 # Root directory of the project
 ROOT_DIR = os.getcwd()
@@ -116,87 +105,6 @@ class MSDataset(utils.Dataset):
         for i in image_ids:
             self.add_image("MSLAQ", image_id=i, path = os.path.join(dataset_dir, i))
 
-    def load_mask(self, image_id):
-        """Load instance masks for the given image.
-
-        Given image should have lesion masks. This function converts the mask format to 
-        format the form of a bitmap [height, width, instances].
-
-        Returns:
-        masks: A bool array of shape [height, width, instance count] with
-            one mask per instance.
-        class_ids: a 1D array of class IDs of the instance masks.
-        """
-        # If not a COCO image, delegate to parent class.
-        image_info = self.image_info[image_id]
-        if image_info["source"] != "coco":
-            return super(CocoDataset, self).load_mask(image_id)
-
-        instance_masks = []
-        class_ids = []
-        annotations = self.image_info[image_id]["annotations"]
-        # Build mask of shape [height, width, instance_count] and list
-        # of class IDs that correspond to each channel of the mask.
-        for annotation in annotations:
-            class_id = self.map_source_class_id(
-                "coco.{}".format(annotation['category_id']))
-            if class_id:
-                m = self.annToMask(annotation, image_info["height"],
-                                   image_info["width"])
-                # Some objects are so small that they're less than 1 pixel area
-                # and end up rounded out. Skip those objects.
-                if m.max() < 1:
-                    continue
-                # Is it a crowd? If so, use a negative class ID.
-                if annotation['iscrowd']:
-                    # Use negative class ID for crowds
-                    class_id *= -1
-                    # For crowd masks, annToMask() sometimes returns a mask
-                    # smaller than the given dimensions. If so, resize it.
-                    if m.shape[0] != image_info["height"] or m.shape[1] != image_info["width"]:
-                        m = np.ones([image_info["height"], image_info["width"]], dtype=bool)
-                instance_masks.append(m)
-                class_ids.append(class_id)
-
-        # Pack instance masks into an array
-        if class_ids:
-            mask = np.stack(instance_masks, axis=2)
-            class_ids = np.array(class_ids, dtype=np.int32)
-            return mask, class_ids
-        else:
-            # Call super class to return an empty mask
-            return super(CocoDataset, self).load_mask(image_id)
-
-    # The following two functions are from pycocotools with a few changes.
-
-    def annToRLE(self, ann, height, width):
-        """
-        Convert annotation which can be polygons, uncompressed RLE to RLE.
-        :return: binary mask (numpy 2D array)
-        """
-        segm = ann['segmentation']
-        if isinstance(segm, list):
-            # polygon -- a single object might consist of multiple parts
-            # we merge all parts into one mask rle code
-            rles = maskUtils.frPyObjects(segm, height, width)
-            rle = maskUtils.merge(rles)
-        elif isinstance(segm['counts'], list):
-            # uncompressed RLE
-            rle = maskUtils.frPyObjects(segm, height, width)
-        else:
-            # rle
-            rle = ann['segmentation']
-        return rle
-
-    def annToMask(self, ann, height, width):
-        """
-        Convert annotation which can be polygons, uncompressed RLE, or RLE to binary mask.
-        :return: binary mask (numpy 2D array)
-        """
-        rle = self.annToRLE(ann, height, width)
-        m = maskUtils.decode(rle)
-        return m
-
 
 ############################################################
 #  Evaluation
@@ -220,10 +128,9 @@ def build_results(dataset, image_ids, rois, class_ids, scores, masks):
 
             result = {
                 "image_id": image_id,
-                "category_id": dataset.get_source_class_id(class_id, "coco"),
                 "bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
                 "score": score,
-                "segmentation": maskUtils.encode(np.asfortranarray(mask))
+                "segmentation": np.asfortranarray(mask)
             }
             results.append(result)
     return results
@@ -295,7 +202,7 @@ if __name__ == '__main__':
                         help="'train' or 'evaluate'")
     parser.add_argument('-d', '--dataset', required=True,
                         metavar="/path/to/mslaq.h5",
-                        help='Directory of the dataset')
+                        help='Directory of the dataset dataset - /usr/local/data/thomasc/unet_out/all_img)')
     #Will probably get rid of this:
     parser.add_argument('-c', '--config', required=True,
                         metavar="-c /path/to/config.json",
@@ -355,31 +262,17 @@ if __name__ == '__main__':
     print("Loading weights ", model_path)
     model.load_weights(model_path)
 
-    # Training and validation datasets. Later: for training use the training set and 35K from the
-    # validation set, as as in the Mask RCNN paper.
-    '''
-    train_ds = DataProvider(expt_cfg['data_path'],
-                            {'mode': 'train', 'shuffle': True if expt_cfg['shuffle'] is 1 else False})
-    valid_ds = DataProvider(expt_cfg['data_path'], {'mode': 'valid', 'shuffle': False})
-    train_gen = train_ds.get_generator(expt_cfg['batch_size'], expt_cfg['nb_epochs'])
-    valid_gen = valid_ds.get_generator(expt_cfg['batch_size'], expt_cfg['nb_epochs'])
-    
-    train_set = Dataset(train_dataset, self.config, augment=True)
-    val_set = Dataset(val_dataset, self.config, augment=True)
-    '''
-
-   
     # Train or evaluate
     if args.command == "train":
         # Training dataset (possibly modify so some examples come from validation set as in MaskRCNN paper)
 
         dataset_train = MSDataset()
-        dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': True if expt_cfg['shuffle'] is 1 else False})
+        dataset_train.load_data(dataset, {'mode': 'train', 'shuffle': True if config.SHUFFLE is 1 else False, 'dim': config.BRAIN_DIMENSIONS,'mods': config.MODALITIES})    
         dataset_train.prepare()
 
         # Validation dataset
         dataset_val = MSDataset()
-        dataset_val.load_data(args.dataset, {'mode': 'train', 'shuffle': False})
+        dataset_val.load_data(args.dataset, {'mode': 'valid', 'shuffle': False})
         dataset_val.prepare()
 
         # Training - Stage 1
@@ -407,12 +300,12 @@ if __name__ == '__main__':
 
     elif args.command == "evaluate":
         # Validation dataset
-        dataset_val = MSDataset()
-        dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': False})
-        dataset_val.prepare()
+        dataset_test = MSDataset()
+        dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False})
+        dataset_test.prepare()
         print("Running evaluation on {} images.".format(args.limit))
-        evaluate(model, valid_generator, "bbox", limit=int(args.limit))
-        evaluate(model, valid_generator, "segm", limit=int(args.limit))
+        evaluate(model, dataset_test, "bbox", limit=int(args.limit))
+        evaluate(model, dataset_test, "segm", limit=int(args.limit))
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'evaluate'".format(args.command))

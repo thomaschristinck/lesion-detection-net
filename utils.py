@@ -61,7 +61,6 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	labels, nles = ndimage.label(mask)
 	boxes = np.zeros([nles + 1, 6], dtype=np.int32)
 	nb_lesions = nles
-	print('True number of lesions : ', nb_lesions)
 
 	# Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
 	for i in range(1, nles + 1):
@@ -107,7 +106,6 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	if dims == 2:
 		boxes = np.delete(boxes, 4, 1)
 		boxes = np.delete(boxes, 4, 1)
-		print('BBox og shape : ', boxes.shape)
 		return boxes.astype(np.int32)
 	else:
 		return boxes.astype(np.int32)
@@ -219,10 +217,11 @@ class Dataset(object):
 
 	def __init__(self, class_map=None):
 		self._image_ids = []
-		self.slice_index = 0
+
 		# Background is always the first class
 		self.class_info = [{"source": "", "id": 0, "name": "BG"}]
 
+		'''
 		BRAIN_DIMENSIONS = 2
 
 		if BRAIN_DIMENSIONS == 2:
@@ -231,7 +230,9 @@ class Dataset(object):
 			self._slice_idx = slice_idx
 		else:
 			slice_idx = ...  
-			self._slice_index = slice_idx
+			self._slice_idx = slice_idx
+		'''
+
 
 	def add_class(self, source, class_id, class_name):
 		assert "." not in source, "Source name cannot contain a dot"
@@ -291,13 +292,16 @@ class Dataset(object):
 	def load_t2_image(self, image_id, dataset, config):
 		"""Load the specified image and return a [H,W] Numpy array.
 		"""
+		# CHANGE LATER: Update slice index
+		self._slice_idx = random.randint(20,45)
+
 		# Get indices
 		nb_mods = len(config.MODALITIES)
 		t2_idx = int((image_id // nb_mods) * nb_mods + 1)
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
 		t2, opts = nrrd.read(t2_file)
-		t2 = np.asarray(t2)[:,:,self._slice_index]
+		t2 = np.asarray(t2)[:,:,self._slice_idx]
 	 
 		return t2
 
@@ -313,7 +317,7 @@ class Dataset(object):
 
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
-		uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_index]
+		uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
 
 		return uncmcvar
 
@@ -333,8 +337,8 @@ class Dataset(object):
 		gt_mask = np.asarray(gt_mask)
 		net_mask = np.asarray(net_mask)
 		
-		net_mask = net_mask[:,:,self._slice_index]
-		gt_mask = gt_mask[:,:,self._slice_index]
+		net_mask = net_mask[:,:,self._slice_idx]
+		gt_mask = gt_mask[:,:,self._slice_idx]
 
 		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
 
@@ -423,7 +427,7 @@ def minimize_mask(bbox, mask, mini_shape, dims, nles, labels):
 		mini_mask = np.zeros(mini_shape + (nles,), dtype=bool)
 	else:
 		mini_mask = np.zeros(mini_shape + (1,), dtype=bool)
-	
+
 	for i in range(nles):	
 		mask[labels != i] = 0
 		mask[labels == i] = 1
