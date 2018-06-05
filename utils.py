@@ -63,7 +63,33 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	boxes = np.zeros([nles + 1, 6], dtype=np.int32)
 	nb_lesions = nles
 
+	print('Number of lesions : ', nb_lesions)
 	# Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
+	if nles == 0:
+		mask[labels == 0] = 1
+ 
+		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
+		lesion_size = np.sum(mask[labels == 0])
+
+		x_indicies = np.where(np.any(mask, axis=0))[0]
+		y_indicies = np.where(np.any(mask, axis=1))[0]
+		z_indicies =[]
+		for lesion_slice in range(mask.shape[-1]):
+			if np.any(mask[...,lesion_slice]):
+				z_indicies.append(lesion_slice)
+		z_indicies = np.asarray(z_indicies)
+   
+		if x_indicies.shape[0]:
+			x1, x2 = x_indicies[[0, -1]]
+			y1, y2 = y_indicies[[0, -1]]
+			z1, z2 = z_indicies[[0, -1]]
+			x2 += 1
+			y2 += 1
+			z2 += 1
+	   
+		boxes[0] = np.array([y1, x1, y2, x2, z1, z2])
+		
+
 	for i in range(1, nles + 1):
 		
 		mask[labels != i] = 0
@@ -87,9 +113,9 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 			x2 += 1
 			y2 += 1
 			z2 += 1
-			if classes[i] == 0:
+			if classes[i] == 1:
 				x1 -= sm_buf; x2 += sm_buf; y1 -= sm_buf; y2 += sm_buf; z1 -= sm_buf; z2 += sm_buf
-			elif classes[i] == 1:
+			elif classes[i] == 2:
 				x1 -= med_buf; x2 += med_buf; y1 -= med_buf; y2 += med_buf; z1 -= med_buf; z2 += med_buf
 			else:
 				x1 -= lar_buf; x2 += lar_buf; y1 -= lar_buf; y2 += lar_buf; z1 -= lar_buf; z2 += lar_buf
@@ -319,7 +345,6 @@ class Dataset(object):
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
 		uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
-
 		return uncmcvar
 
 	def load_masks(self, image_id, dataset, config):
@@ -359,8 +384,6 @@ class Dataset(object):
 			gt_masks[i] = gt_mask
 
 		gt_masks = gt_masks.transpose(1, 2, 0)
-
-		print('gt mask shape ; ', gt_masks.shape)
 
 		return net_mask, gt_masks, class_ids
 

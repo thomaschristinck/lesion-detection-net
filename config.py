@@ -60,10 +60,10 @@ class Config(object):
     BACKBONE_STRIDES = [4, 8, 16, 32, 64]
 
     # Number of classification classes (including background)
-    NUM_CLASSES = 1  # Override in sub-classes
+    NUM_CLASSES = 4  # Override in sub-classes
 
-    # Length of square anchor side in pixels
-    RPN_ANCHOR_SCALES = (32, 64, 128, 256, 512)
+    # Length of square anchor side in pixels - divded all by 8
+    RPN_ANCHOR_SCALES = (2, 8, 16, 64, 192)
 
     # Ratios of anchors at each cell (width/height)
     # A value of 1 represents a square anchor, and 0.5 is a wide anchor
@@ -78,8 +78,8 @@ class Config(object):
     # You can reduce this during training to generate more propsals.
     RPN_NMS_THRESHOLD = 0.7
 
-    # How many anchors per image to use for RPN training
-    RPN_TRAIN_ANCHORS_PER_IMAGE = 256
+    # How many anchors per image to use for RPN training - increased by 4 x
+    RPN_TRAIN_ANCHORS_PER_IMAGE = 1024
 
     # ROIs kept after non-maximum supression (training and inference)
     POST_NMS_ROIS_TRAINING = 2000
@@ -94,7 +94,7 @@ class Config(object):
     # Images are resized such that the smallest side is >= IMAGE_MIN_DIM and
     # the longest side is <= IMAGE_MAX_DIM. In case both conditions can't
     # be satisfied together the IMAGE_MAX_DIM is enforced.
-    IMAGE_MIN_DIM = 112
+    IMAGE_MIN_DIM = 56
     IMAGE_MAX_DIM = 192
     # If True, pad images with zeros such that they're (max_dim by max_dim)
     IMAGE_PADDING = True  # currently, the False option is not supported
