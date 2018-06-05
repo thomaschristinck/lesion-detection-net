@@ -547,10 +547,10 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 	Inputs:
 	proposals: [batch, N, (y1, x1, y2, x2)] in normalized coordinates. Might
 			   be zero padded if there are not enough proposals.
-	gt_class_ids: [batch, MAX_GT_INSTANCES] Integer class IDs.
-	gt_boxes: [batch, MAX_GT_INSTANCES, (y1, x1, y2, x2)] in normalized
+	gt_class_ids: [batch, GT_INSTANCES] Integer class IDs.
+	gt_boxes: [batch, GT_INSTANCES, (y1, x1, y2, x2)] in normalized
 			  coordinates.
-	gt_masks: [batch, height, width] of boolean type
+	gt_masks: [batch, height, width, GT_INSTANCES ] of boolean type
 
 	Returns: Target ROIs and corresponding class IDs, bounding box shifts,
 	and masks.
@@ -564,26 +564,25 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 				 Masks cropped to bbox boundaries and resized to neural
 				 network output size.
 	"""
-	print('proposal shape: ', proposals.shape)
-	print('class ids shape: ', gt_class_ids.shape)
-	print('boxes shape: ', gt_boxes.shape)
-	print('masks shape: ', gt_masks.shape)
 
-
-	#TUESDAY
-	
 	# Currently only supports batchsize 1
 	proposals = proposals.squeeze(0)
 	gt_class_ids = gt_class_ids.squeeze(0)
 	gt_boxes = gt_boxes.squeeze(0)
 	gt_masks = gt_masks.squeeze(0)
 
+	
+	print('proposal shape: ', proposals.shape)
+	print('class ids shape: ', gt_class_ids.shape)
+	print('boxes shape: ', gt_boxes.shape)
+	print('masks shape: ', gt_masks.shape)
+
 	# Compute overlaps matrix [proposals, gt_boxes]
 	overlaps = bbox_overlaps(proposals, gt_boxes)
 
 	# Determine postive and negative ROIs
 	print('overlaps', overlaps.shape)
-	roi_iou_max = torch.max(overlaps, dim=1)[0] #CHANGED dim=1 to 0
+	roi_iou_max = torch.max(overlaps, dim=0)[0] #CHANGED dim=1 to 0
 
 	# 1. Positive ROIs are those with >= 0.5 IoU with a GT box
 	positive_roi_bool = roi_iou_max >= 0.5
@@ -591,7 +590,7 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 	# Subsample ROIs. Aim for 33% positive
 	# Positive ROIs
 	if torch.nonzero(positive_roi_bool).size():
-		positive_indices = torch.nonzero(positive_roi_bool)	#[:, 0]
+		positive_indices = torch.nonzero(positive_roi_bool)#[:, 0]
 
 		positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
 							 config.ROI_POSITIVE_RATIO)
@@ -606,17 +605,19 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 		# Assign positive ROIs to GT boxes.
 		positive_overlaps = overlaps[positive_indices.data,:]
 		print('pos overlaps', positive_overlaps.shape)
-		roi_gt_box_assignment = torch.max(positive_overlaps, dim=2)[1] #CHANGED dim=1 to 0
+		roi_gt_box_assignment = torch.max(positive_overlaps, dim=0)[0] #CHANGED dim=1 to 0
 		roi_gt_boxes = gt_boxes[roi_gt_box_assignment.data,:]
 		roi_gt_class_ids = gt_class_ids[roi_gt_box_assignment.data]
 
 		# Compute bbox refinement for positive ROIs
-		deltas = Variable(utils.box_refinement(positive_rois.data, roi_gt_boxes.data), requires_grad=False)
+		deltas = Variable(utils.box_2D_refinement(positive_rois.data, roi_gt_boxes.data), requires_grad=False)
 		std_dev = Variable(torch.from_numpy(config.BBOX_STD_DEV).float(), requires_grad=False)
 		if config.GPU_COUNT:
 			std_dev = std_dev.cuda()
 		deltas /= std_dev
 
+
+		print('roiassignment data : ', roi_gt_box_assignment.data)
 		# Assign positive ROIs to GT masks
 		roi_masks = gt_masks[roi_gt_box_assignment.data,:,:]
 
@@ -640,9 +641,10 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 		masks = Variable(CropAndResizeFunction(config.MASK_SHAPE[0], config.MASK_SHAPE[1], 0)(roi_masks.unsqueeze(1), boxes, box_ids).data, requires_grad=False)
 		masks = masks.squeeze(1)
 
+		# Following bit isn't necessary bc the gt masks from unet are already binarized
 		# Threshold mask pixels at 0.5 to have GT masks be 0 or 1 to use with
 		# binary cross entropy loss.
-		masks = torch.round(masks)
+		 #masks = torch.round(masks)
 	else:
 		positive_count = 0
 
@@ -1158,65 +1160,37 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	t2_image = dataset.load_t2_image(image_id, dataset, config)
 	net_mask, gt_mask, class_ids = dataset.load_masks(image_id, dataset, config)
 	uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
-	
-	labels = {}
-	nles ={}
-	labels, nles = ndimage.label(gt_mask)
 
-	shape = t2_image.shape
-	
-	t2_image, window, scale, padding = utils.resize_image(
-		t2_image,
+	# Now combine image data into a 192 * 192 * 3 image 
+	image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
+	shape = image.shape
+
+	image, window, scale, padding = utils.resize_image(
+		image,
 		min_dim=config.IMAGE_MIN_DIM,
 		max_dim=config.IMAGE_MAX_DIM,
 		padding=config.IMAGE_PADDING,
 		dims=config.BRAIN_DIMENSIONS)
-
-	uncmcvar, window, scale, padding = utils.resize_image(
-		uncmcvar,
-		min_dim=config.IMAGE_MIN_DIM,
-		max_dim=config.IMAGE_MAX_DIM,
-		padding=config.IMAGE_PADDING,
-		dims=config.BRAIN_DIMENSIONS)
-
 
 	#Resize masks - ultimately will compress lesion mask size to save memory (refer to Mask RCNN Paper)
 
+	print('(1) Initial loaded image shape : ', image.shape)
+
 	dims=config.BRAIN_DIMENSIONS
 	gt_mask = utils.resize_mask(gt_mask, scale, padding, dims)
-	net_mask = utils.resize_mask(net_mask, scale, padding, dims)
 
 	# Random horizontal flips.
 	
 	if augment:
 		if random.randint(0, 1):
-			t2_image = np.fliplr(t2_image)
-			uncmcvar = np.fliplr(uncmcvar)
-			net_mask = np.fliplr(net_mask)
+			image = np.fliplr(image)
 			gt_mask = np.fliplr(gt_mask)
-			uncmcvar = np.fliplr(uncmcvar)
 		
-
 	# Bounding boxes. Note that some boxes might be all zeros
 	# if the corresponding mask got cropped out - trying to fix this
 	# bbox: [num_instances, (y1, x1, y2, x2)]
 
 	bbox = utils.extract_bboxes(gt_mask, class_ids, dims, sm_buf = 1, med_buf = 2, lar_buf = 4)
-
-	'''
-	img = gt_mask
-
-	for les in range(1, nles + 1):
-		if class_ids[les] == 1:
-			img = visualize.draw_box(gt_mask, bbox[les, :4], color=0.2)
-		elif class_ids[les] == 2:
-			img = visualize.draw_box(gt_mask, bbox[les, :4], color=0.4)
-		elif class_ids[les] == 3:
-			img = visualize.draw_box(gt_mask, bbox[les, :4], color=0.7)
-  
-	imgplt = plt.imshow(img)
-	plt.show()
-	'''
 	
 
 	# TODO: Resize masks to smaller size to reduce memory usage
@@ -1230,7 +1204,9 @@ def load_image_gt(dataset, config, image_id, augment=False,
 
 	image_meta = compose_image_meta(image_id, shape, window)
 
-	return t2_image, uncmcvar, class_ids, bbox, net_mask, gt_mask, image_meta
+	print('Initial loaded image shape : ', image.shape)
+
+	return image, class_ids, bbox, gt_mask, image_meta
 
 def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
 	"""Given the anchors and GT boxes, compute overlaps and identify positive
@@ -1374,9 +1350,11 @@ class Dataset(torch.utils.data.Dataset):
 
 		# Get GT bounding boxes and masks for image.
 		image_id = self._image_ids[image_index]
-		t2_image, uncmcvar, gt_class_ids, gt_boxes, net_masks, gt_masks, image_metas = \
+		image, gt_class_ids, gt_boxes, gt_masks, image_metas = \
 			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
 						  use_mini_mask=self._config.USE_MINI_MASK)
+
+		print('Initial image shape : ', image.shape)
 
 		# For now I include images that have no instances. This can happen in cases
 		# where we train on 2D slices and a particular slice doesn't
@@ -1386,7 +1364,7 @@ class Dataset(torch.utils.data.Dataset):
 			#return None
 
 		# RPN Targets
-		rpn_match, rpn_bbox = build_rpn_targets(t2_image.shape, self._anchors,
+		rpn_match, rpn_bbox = build_rpn_targets(image.shape, self._anchors,
 												gt_class_ids, gt_boxes, self._config)
 
 		# If more instances than fits in the array, sub-sample from them. FIX later
@@ -1399,18 +1377,11 @@ class Dataset(torch.utils.data.Dataset):
 
 		# Add to batch
 		rpn_match = rpn_match[:, np.newaxis]
-		t2_image = mold_image(t2_image.astype(np.float32), self._config)
-		uncmcvar = mold_image(uncmcvar.astype(np.float32), self._config)
+		image = mold_image(image.astype(np.float32), self._config)
 
 		# Convert
-		if self._config.BRAIN_DIMENSIONS == 3:
-			t2_image = t2_image.transpose(2, 0, 1)
-			uncmcvar = uncmcvar.transpose(2, 0, 1)
-			gt_masks = gt_masks.transpose(2, 0, 1)
-
-
-		# Now combine image data into a 196 * 196 (or whatever it is) * 3 image 
-		image = np.stack([t2_image, uncmcvar, net_masks], axis=0)
+		if self._config.BRAIN_DIMENSIONS == 2:
+			image = image.transpose(2, 0, 1)
 		
 		image = torch.from_numpy(image).float()
 		rpn_match = torch.from_numpy(rpn_match)
@@ -1420,7 +1391,7 @@ class Dataset(torch.utils.data.Dataset):
 		gt_masks = torch.from_numpy(gt_masks)
 		image_metas = torch.from_numpy(image_metas)
 		
-
+		print('Data provider images size : ', image.shape)
 		#Return all images
 		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas
 
@@ -1617,6 +1588,7 @@ class MaskRCNN(nn.Module):
 
 		# Mold inputs to format expected by the neural network
 		molded_images, image_metas, windows = self.mold_inputs(images)
+
 
 		# Convert images to torch tensor
 		molded_images = torch.from_numpy(molded_images.transpose(0, 3, 1, 2)).float()
@@ -1886,6 +1858,7 @@ class MaskRCNN(nn.Module):
 				gt_boxes = gt_boxes.cuda()
 				gt_masks = gt_masks.cuda()
 	
+			print('Images size : ', images.shape)
 
 			# Run object detection
 			rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \
@@ -2149,6 +2122,8 @@ def mold_image(images, config):
 	"""Takes RGB images with 0-255 values and subtraces
 	the mean pixel and converts it to float. Expects image
 	colors in RGB order.
+
+	I've modified this somewhat randomly (see config)
 	"""
 	return images.astype(np.float32) - config.MEAN_PIXEL
 

@@ -7,6 +7,7 @@ import numpy as np
 import scipy.misc
 import skimage.color
 import skimage.io
+import skimage
 import torch
 import visualize
 import nrrd
@@ -340,9 +341,28 @@ class Dataset(object):
 		net_mask = net_mask[:,:,self._slice_idx]
 		gt_mask = gt_mask[:,:,self._slice_idx]
 
+		# Remove small lesions
 		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
 
-		return net_mask, gt_mask, class_ids
+		# Return a mask for each lesion instance
+		labels = {}
+		nles = {}
+		labels, nles = ndimage.label(gt_mask)
+		gt_masks = np.zeros([nles + 1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+
+		# Look for all the voxels associated with a particular lesion
+
+		for i in range(1, nles + 1):
+		
+			gt_mask[labels != i] = 0
+			gt_mask[labels == i] = 1
+			gt_masks[i] = gt_mask
+
+		gt_masks = gt_masks.transpose(1, 2, 0)
+
+		print('gt mask shape ; ', gt_masks.shape)
+
+		return net_mask, gt_masks, class_ids
 
 def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 	"""
@@ -380,8 +400,11 @@ def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 			scale = max_dim / image_max
 	# Resize image and mask
 	if scale != 1:
-		image = scipy.misc.imresize(
+		image = skimage.transform.resize(
 			image, (round(h * scale), round(w * scale)))
+
+	image = image.transpose(1,2,0)
+
 	# Need padding?
 	if padding:
 		# Get new height and width
@@ -391,11 +414,13 @@ def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 		left_pad = (max_dim - w) // 2
 		right_pad = max_dim - w - left_pad
 		if dims == 2:
-			padding = [(top_pad, bottom_pad), (left_pad, right_pad)]
+			padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
 		else:
 			padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
+			# CHANGE later - padding = [(top_pad, bottom_pad), (left_pad, right_pad), (front_pad,  back_pad), (0,0)]
 		image = np.pad(image, padding, mode='constant', constant_values=0)
 		window = (top_pad, left_pad, h + top_pad, w + left_pad)
+	
 	return image, window, scale, padding
 
 
@@ -410,10 +435,11 @@ def resize_mask(mask, scale, padding, dims):
 	"""
 
 	if dims == 2:
-		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale], order=0)
+		print('Mask shape : ', mask.shape)
+		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, 1], order=0)
 	else:
 		# MODIFY later to ensure proper scaling
-		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, scale], order=0)
+		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, scale, 1], order=0)
 
 	mask = np.pad(mask, padding, mode='constant', constant_values=0)
 	return mask

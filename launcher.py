@@ -98,8 +98,6 @@ class MSDataset(utils.Dataset):
 			slice_idx = ...  
 			self._slice_idx = slice_idx
 
-		print('slice index (should NOT be 0 : ', self._slice_idx)
-
 		fold_length = len(self._image_ids) // self._nb_folds
 		
 		train_idx = (((self._nb_folds - 2) * fold_length) // 7) * 7
