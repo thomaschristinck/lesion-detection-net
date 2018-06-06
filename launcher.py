@@ -214,13 +214,13 @@ if __name__ == '__main__':
 	parser.add_argument("command",
 						metavar="<command>",
 						help="'train' or 'evaluate'")
-	parser.add_argument('-d', '--dataset', required=True,
+	parser.add_argument('--dataset', required=True,
 						metavar="/path/to/mslaq.h5",
 						help='Directory of the dataset')
-	parser.add_argument('-m', '--model', required=False,
+	parser.add_argument('--model', required=False,
 						metavar="-m /path/to/weights.pth",
 						help="Path to weights .pth file")
-	parser.add_argument('-l' '--logs', required=False,
+	parser.add_argument('--logs', required=False,
 						default=DEFAULT_LOGS_DIR,
 						metavar="-l /path/to/logs/",
 						help='Logs and checkpoints directory (default=logs/)')
@@ -235,14 +235,21 @@ if __name__ == '__main__':
 	print("Dataset: ", args.dataset)
 
 	# Configurations
-
-	config = DataConfig()	
+	if args.command == 'train':
+		config = DataConfig()
+	else:
+		class InferenceConfig(DataConfig):
+			# Set batch size to 1
+			GPU_COUNT = 1
+			IMAGES_PER_GPU = 1
+			DETECTION_MIN_CONFIDENCE = 0
+		config = InferenceConfig()	
 	config.display()
 
 	# Create model
  
 	model = modellib.MaskRCNN(config=config,
-								  model_dir='usr/local/data/thomasc')
+								  model_dir=args.logs)
 	if config.GPU_COUNT:
 		model = model.cuda()
 

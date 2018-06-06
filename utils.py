@@ -65,6 +65,7 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 
 	print('Number of lesions : ', nb_lesions)
 	# Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
+	'''
 	if nles == 0:
 		mask[labels == 0] = 1
  
@@ -88,6 +89,7 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 			z2 += 1
 	   
 		boxes[0] = np.array([y1, x1, y2, x2, z1, z2])
+	'''
 		
 
 	for i in range(1, nles + 1):
@@ -458,7 +460,6 @@ def resize_mask(mask, scale, padding, dims):
 	"""
 
 	if dims == 2:
-		print('Mask shape : ', mask.shape)
 		mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, 1], order=0)
 	else:
 		# MODIFY later to ensure proper scaling

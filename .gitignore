@@ -1,5 +1,8 @@
 .DS_Store
 
 #Imagenet weights
-.pth
-.pyc
+*.pth
+*.pyc
+
+#Images
+*.png
