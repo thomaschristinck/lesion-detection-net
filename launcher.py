@@ -214,7 +214,7 @@ if __name__ == '__main__':
 	parser.add_argument("command",
 						metavar="<command>",
 						help="'train' or 'evaluate'")
-	parser.add_argument('--dataset', required=True,
+	parser.add_argument('-d', '--dataset', required=True,
 						metavar="/path/to/mslaq.h5",
 						help='Directory of the dataset')
 	parser.add_argument('--model', required=False,

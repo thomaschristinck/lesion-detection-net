@@ -63,35 +63,6 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	boxes = np.zeros([nles + 1, 6], dtype=np.int32)
 	nb_lesions = nles
 
-	print('Number of lesions : ', nb_lesions)
-	# Look for all the voxels associated with a particular lesion, then bound on x, y, z axis
-	'''
-	if nles == 0:
-		mask[labels == 0] = 1
- 
-		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
-		lesion_size = np.sum(mask[labels == 0])
-
-		x_indicies = np.where(np.any(mask, axis=0))[0]
-		y_indicies = np.where(np.any(mask, axis=1))[0]
-		z_indicies =[]
-		for lesion_slice in range(mask.shape[-1]):
-			if np.any(mask[...,lesion_slice]):
-				z_indicies.append(lesion_slice)
-		z_indicies = np.asarray(z_indicies)
-   
-		if x_indicies.shape[0]:
-			x1, x2 = x_indicies[[0, -1]]
-			y1, y2 = y_indicies[[0, -1]]
-			z1, z2 = z_indicies[[0, -1]]
-			x2 += 1
-			y2 += 1
-			z2 += 1
-	   
-		boxes[0] = np.array([y1, x1, y2, x2, z1, z2])
-	'''
-		
-
 	for i in range(1, nles + 1):
 		
 		mask[labels != i] = 0
@@ -249,18 +220,6 @@ class Dataset(object):
 
 		# Background is always the first class
 		self.class_info = [{"source": "", "id": 0, "name": "BG"}]
-
-		'''
-		BRAIN_DIMENSIONS = 2
-
-		if BRAIN_DIMENSIONS == 2:
-			#Going to just try looking at a random slice for now
-			slice_idx = random.randint(20,45)
-			self._slice_idx = slice_idx
-		else:
-			slice_idx = ...  
-			self._slice_idx = slice_idx
-		'''
 
 
 	def add_class(self, source, class_id, class_name):

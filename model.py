@@ -13,7 +13,6 @@ import math
 import os
 import random
 import re
-import pdb
 
 import numpy as np
 import torch
@@ -32,6 +31,7 @@ import utils
 import visualize
 from nms.nms_wrapper import nms
 from roialign.roi_align.crop_and_resize import CropAndResizeFunction
+from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
 
@@ -574,19 +574,14 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 	overlaps = bbox_overlaps(proposals, gt_boxes)
 
 	# Determine postive and negative ROIs
-	#print('overlaps', overlaps.shape)
-	roi_iou_max = torch.max(overlaps, dim=1)[0] #CHANGED dim=1 to 0
-	#print('roi iou max: ', torch.sum(roi_iou_max))
+	roi_iou_max = torch.max(overlaps, dim=1)[0] 
 
 	# 1. Positive ROIs are those with >= 0.4 IoU with a GT box
 	positive_roi_bool = roi_iou_max >= 0.4
-	#print('sum of roi bool : ', torch.sum(positive_roi_bool))
-	#print('Size of roi bool: ', torch.nonzero(positive_roi_bool).size(0))
 
 	# Subsample ROIs. Aim for 33% positive
 	# Positive ROIs
 	if torch.nonzero(positive_roi_bool).size():
-		#print('Size of roi : ', torch.nonzero(positive_roi_bool).size(0))
 		positive_indices = torch.nonzero(positive_roi_bool)[:, 0]
 
 		positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
@@ -601,7 +596,6 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 
 		# Assign positive ROIs to GT boxes.
 		positive_overlaps = overlaps[positive_indices.data,:]
-		#print('pos overlaps', positive_overlaps.shape)
 		roi_gt_box_assignment = torch.max(positive_overlaps, dim=1)[1] #CHANGED dim=1 to 0
 		roi_gt_boxes = gt_boxes[roi_gt_box_assignment.data,:]
 		roi_gt_class_ids = gt_class_ids[roi_gt_box_assignment.data]
@@ -1019,24 +1013,18 @@ def compute_rpn_bbox_loss(target_bbox, rpn_match, rpn_bbox):
 	"""
 
 	# Squeeze last dim to simplify
-	print('Target bbox (1): ', target_bbox.shape)
-	print('RPN match : ', rpn_match.shape)
-	print('RPN bbox (1): ', rpn_bbox.shape)
+	rpn_match = rpn_match.squeeze(2)
 
 	# Positive anchors contribute to the loss, but negative and
 	# neutral anchors (match value of 0 or -1) don't.
 	indices = torch.nonzero(rpn_match==1)
-	print('Indices size : ', indices.shape)
+
 	# Pick bbox deltas that contribute to the loss
 	rpn_bbox = rpn_bbox[indices.data[:,0],indices.data[:,1]]
 
-	print('RPN bbox (2): ', rpn_bbox.shape)
 	# Trim target bounding box deltas to the same length as rpn_bbox.
 	target_bbox = target_bbox[0,:rpn_bbox.size()[0],:]
-	print('Target bbox (2): ', target_bbox.shape)
 
-	print('Maxima : ', torch.max(target_bbox, dim=0), torch.max(rpn_bbox, dim=0))
-	print('Target and RPN : ', target_bbox, rpn_bbox)
 	# Smooth L1 loss
 	loss = F.smooth_l1_loss(rpn_bbox, target_bbox)
 
@@ -1220,8 +1208,6 @@ def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 	rpn_bbox: [N, (dy, dx, log(dh), log(dw))] Anchor bbox deltas.
 	"""
 
-	print('anchor shape [num_anchors, 4]', anchors.shape)
-	print('GT boxes shape [num_gt_boxes, 4]', gt_boxes.shape)
 	# RPN Match: 1 = positive anchor, -1 = negative anchor, 0 = neutral
 	rpn_match = np.zeros([anchors.shape[0]], dtype=np.int32)
 	# RPN bounding boxes: [max anchors per image, (dy, dx, log(dh), log(dw))]
@@ -1289,6 +1275,9 @@ def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 		a_center_x = a[1] + 0.5 * a_w
 
 		# Compute the bbox refinement that the RPN should predict.
+		if gt_h == 0 and gt_w == 0:
+			gt_h = 192
+			gt_w = 192
 		try:
 			rpn_bbox[ix] = [
 				(gt_center_y - a_center_y) / a_h,
@@ -1779,8 +1768,8 @@ class MaskRCNN(nn.Module):
 		train_set = Dataset(train_dataset, self.config, augment=True)
 		val_set = Dataset(val_dataset, self.config, augment=True)
 
-		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1)
-		val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=1)
+		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
+		val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=4)
 
 		# Train
 		log("\nStarting at epoch {}. LR={}\n".format(self.epoch+1, learning_rate))
@@ -1829,6 +1818,7 @@ class MaskRCNN(nn.Module):
 		step = 0
 
 		optimizer.zero_grad()
+		start = timer()
 
 		for inputs in datagenerator:
 
@@ -1878,11 +1868,16 @@ class MaskRCNN(nn.Module):
 				batch_count = 0
 
 			# Progress
-			printProgressBar(step + 1, steps, prefix="\t{}/{}".format(step + 1, steps),
+			if step < 50 or step % 20 == 0:
+				printProgressBar(step + 1, steps, prefix="\t{}/{}".format(step + 1, steps),
 							 suffix="Complete - loss: {:.5f} - rpn_class_loss: {:.5f} - rpn_bbox_loss: {:.5f} - mrcnn_class_loss: {:.5f} - mrcnn_bbox_loss: {:.5f} - mrcnn_mask_loss: {:.5f}".format(
 								 loss.data.cpu()[0], rpn_class_loss.data.cpu()[0], rpn_bbox_loss.data.cpu()[0],
 								 mrcnn_class_loss.data.cpu()[0], mrcnn_bbox_loss.data.cpu()[0],
 								 mrcnn_mask_loss.data.cpu()[0]), length=10)
+				print('completed {} steps in {:.2f}m'.format(step, (timer() - start) / 60))
+
+			#
+
 
 			# Statistics
 			loss_sum += loss.data.cpu()[0]/steps
