@@ -63,7 +63,7 @@ class Config(object):
     NUM_CLASSES = 4  # Override in sub-classes
 
     # Length of square anchor side in pixels - divded all by 8
-    RPN_ANCHOR_SCALES = (2, 8, 16, 64, 192)
+    RPN_ANCHOR_SCALES = (2, 4, 8, 16, 32)
 
     # Ratios of anchors at each cell (width/height)
     # A value of 1 represents a square anchor, and 0.5 is a wide anchor
@@ -79,7 +79,7 @@ class Config(object):
     RPN_NMS_THRESHOLD = 0.7
 
     # How many anchors per image to use for RPN training - increased by 4 x
-    RPN_TRAIN_ANCHORS_PER_IMAGE = 1024
+    RPN_TRAIN_ANCHORS_PER_IMAGE = 512
 
     # ROIs kept after non-maximum supression (training and inference)
     POST_NMS_ROIS_TRAINING = 2000

@@ -87,6 +87,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     figsize: (optional) the size of the image.
     """
     # Number of instances
+    plt.show()
     N = boxes.shape[0]
     if not N:
         print("\n*** No instances to display *** \n")
@@ -104,9 +105,8 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     ax.set_ylim(height + 10, -10)
     ax.set_xlim(-10, width + 10)
     ax.axis('off')
-    ax.set_title(title)
 
-    masked_image = image.astype(np.uint32).copy()
+    masked_image = image[:,:,0].astype(np.uint32).copy()
     for i in range(N):
         color = colors[i]
 
@@ -145,6 +145,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
             p = Polygon(verts, facecolor="none", edgecolor=color)
             ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8))
+    #ax[0,1].imshow(target.astype(np.uint8))
     plt.show()
     
 

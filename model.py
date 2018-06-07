@@ -1178,7 +1178,6 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# bbox: [num_instances, (y1, x1, y2, x2)]
 
 	bbox = utils.extract_bboxes(gt_mask, class_ids, dims, sm_buf = 1, med_buf = 2, lar_buf = 4)
-	
 
 	# TODO: Resize masks to smaller size to reduce memory usage
 	#if use_mini_mask:
@@ -1278,15 +1277,14 @@ def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 		if gt_h == 0 and gt_w == 0:
 			gt_h = 192
 			gt_w = 192
-		try:
-			rpn_bbox[ix] = [
-				(gt_center_y - a_center_y) / a_h,
-				(gt_center_x - a_center_x) / a_w,
-				np.log(gt_h / a_h),
-				np.log(gt_w / a_w),
-			]
-		except RuntimeWarning:
-			print('dividing by zero')
+
+		rpn_bbox[ix] = [
+			(gt_center_y - a_center_y) / a_h,
+			(gt_center_x - a_center_x) / a_w,
+			np.log(gt_h / a_h),
+			np.log(gt_w / a_w),
+		]
+			
 		# Normalize
 		rpn_bbox[ix] /= config.RPN_BBOX_STD_DEV
 		ix += 1
@@ -1595,14 +1593,15 @@ class MaskRCNN(nn.Module):
 
 		# Convert to numpy
 		detections = detections.data.cpu().numpy()
+		print('Number of detections : ', detections.shape)
 		mrcnn_mask = mrcnn_mask.permute(0, 1, 3, 4, 2).data.cpu().numpy()
 
 		# Process detections
 		results = []
-		for i, image in enumerate(t2):
+		for i, image in enumerate(images):
 			final_rois, final_class_ids, final_scores, final_masks =\
 				self.unmold_detections(detections[i], mrcnn_mask[i],
-									   t2.shape, windows[i])
+									   image.shape, windows[i])
 			results.append({
 				"rois": final_rois,
 				"class_ids": final_class_ids,
@@ -1905,43 +1904,37 @@ class MaskRCNN(nn.Module):
 		loss_mrcnn_mask_sum = 0
 
 		for inputs in datagenerator:
-			t2_images = inputs[0]
-			uncmcvar = inputs[1]
-			rpn_match = inputs[2]
-			rpn_bbox = inputs[3]
-			gt_class_ids = inputs[4]
-			gt_boxes = inputs[5]
-			gt_masks = inputs[6]
-			net_masks = inputs[7]
-			image_metas = inputs[8]
+			images = inputs[0]
+			rpn_match = inputs[1]
+			rpn_bbox = inputs[2]
+			gt_class_ids = inputs[3]
+			gt_boxes = inputs[4]
+			gt_masks = inputs[5]
+			image_metas = inputs[6]
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
 
 			# Wrap in variables
-			t2_images = Variable(t2_images, volatile=True)
-			uncmcvar = Variable(uncmcvar, volatile=True)
+			images = Variable(images, volatile=True)
 			rpn_match = Variable(rpn_match, volatile=True)
 			rpn_bbox = Variable(rpn_bbox, volatile=True)
 			gt_class_ids = Variable(gt_class_ids, volatile=True)
 			gt_boxes = Variable(gt_boxes, volatile=True)
 			gt_masks = Variable(gt_masks, volatile=True)
-			net_masks = Variable(net_masks, volatile=True)
 
 			# To GPU
 			if self.config.GPU_COUNT:
-				t2_images = t2_images.cuda()
-				uncmcvar = uncmcvar.cuda()
+				images = images.cuda()
 				rpn_match = rpn_match.cuda()
 				rpn_bbox = rpn_bbox.cuda()
 				gt_class_ids = gt_class_ids.cuda()
 				gt_boxes = gt_boxes.cuda()
 				gt_masks = gt_masks.cuda()
-				net_masks = net_masks.cuda()
 
 			# Run object detection
 			rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \
-				self.predict([t2_images, uncmcvar, net_masks, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='training')
+				self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='training')
 
 			if not target_class_ids.size():
 				continue
@@ -2000,8 +1993,7 @@ class MaskRCNN(nn.Module):
 			molded_image = mold_image(molded_image, self.config)
 			# Build image_meta
 			image_meta = compose_image_meta(
-				0, image.shape, window,
-				np.zeros([self.config.NUM_CLASSES], dtype=np.int32))
+				0, image.shape, window)
 			# Append
 			molded_images.append(molded_image)
 			windows.append(window)
@@ -2032,11 +2024,14 @@ class MaskRCNN(nn.Module):
 		"""
 		# How many detections do we have?
 		# Detections array is padded with zeros. Find the first class_id == 0.
+		detections = detections
+		print('Modified detection shape : ', detections.shape)
 		zero_ix = np.where(detections[:, 4] == 0)[0]
 		N = zero_ix[0] if zero_ix.shape[0] > 0 else detections.shape[0]
 
 		# Extract boxes, class_ids, scores, and class-specific masks
 		boxes = detections[:N, :4]
+		print('boxes :', boxes)
 		class_ids = detections[:N, 4].astype(np.int32)
 		scores = detections[:N, 5]
 		masks = mrcnn_mask[np.arange(N), :, :, class_ids]

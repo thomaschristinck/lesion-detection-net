@@ -60,7 +60,7 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 	labels = {}
 	nles = {}
 	labels, nles = ndimage.label(mask)
-	boxes = np.zeros([nles + 1, 6], dtype=np.int32)
+	boxes = np.zeros([nles, 6], dtype=np.int32)
 	nb_lesions = nles
 
 	for i in range(1, nles + 1):
@@ -86,9 +86,9 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 			x2 += 1
 			y2 += 1
 			z2 += 1
-			if classes[i] == 1:
+			if classes[i-1] == 1:
 				x1 -= sm_buf; x2 += sm_buf; y1 -= sm_buf; y2 += sm_buf; z1 -= sm_buf; z2 += sm_buf
-			elif classes[i] == 2:
+			elif classes[i-1] == 2:
 				x1 -= med_buf; x2 += med_buf; y1 -= med_buf; y2 += med_buf; z1 -= med_buf; z2 += med_buf
 			else:
 				x1 -= lar_buf; x2 += lar_buf; y1 -= lar_buf; y2 += lar_buf; z1 -= lar_buf; z2 += lar_buf
@@ -96,8 +96,14 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 			# No mask for this instance
 			x1, x2, y1, y2, z1, z2 = 0, 0, 0, 0, 0, 0
 	   
-		boxes[i] = np.array([y1, x1, y2, x2, z1, z2])
-		
+	   # We want 1 box (and 1 lesion mask, and one class) for each lesion
+		boxes[i - 1] = np.array([y1, x1, y2, x2, z1, z2])
+	
+	if boxes.size == 0:
+		x1, x2, y1, y2, z1, z2 = 0, 0, 0, 0, 0, 0
+		boxes = np.zeros([1, 6], dtype=np.int32)
+		boxes[0] = np.array([y1, x1, y2, x2, z1, z2])	
+	
 	# Reset ground truth mask and then we can draw boxes
 
 	for i in range(1, nb_lesions + 1):
@@ -114,7 +120,7 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 
 def remove_tiny_les(lesion_image, nvox=2):
 	labels, nles = ndimage.label(lesion_image)
-	class_ids = np.zeros([nles + 1, 1], dtype=np.int32)
+	class_ids = np.zeros([nles, 1], dtype=np.int32)
 
 	for i in range(1, nles + 1):
 		nb_vox = np.sum(lesion_image[labels == i])
@@ -125,13 +131,17 @@ def remove_tiny_les(lesion_image, nvox=2):
 		lesion_image[labels != i] = 0
 		lesion_image[labels == i] = 1
 		lesion_size = np.sum(lesion_image[labels == i])
-		class_ids[i] = get_2D_lesion_bin(lesion_size)
+		class_ids[i-1] = get_2D_lesion_bin(lesion_size)
 
 	# Reset ground truth mask
 	for i in range(1, nles + 1):
 		lesion_image[labels == i] = 1
 
 	class_ids = np.asarray(class_ids)
+
+	if class_ids.size == 0:
+		class_ids = np.zeros([1, 1], dtype=np.int32)
+		class_ids[0] = 0
 
 	return lesion_image, class_ids
 
@@ -334,7 +344,13 @@ class Dataset(object):
 		labels = {}
 		nles = {}
 		labels, nles = ndimage.label(gt_mask)
-		gt_masks = np.zeros([nles + 1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+
+		# Check if there are no lesions
+
+		if nles == 0:
+			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+			gt_masks[0] = gt_mask
 
 		# Look for all the voxels associated with a particular lesion
 
@@ -342,7 +358,7 @@ class Dataset(object):
 		
 			gt_mask[labels != i] = 0
 			gt_mask[labels == i] = 1
-			gt_masks[i] = gt_mask
+			gt_masks[i-1] = gt_mask
 
 		gt_masks = gt_masks.transpose(1, 2, 0)
 
