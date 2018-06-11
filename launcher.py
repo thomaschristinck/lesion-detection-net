@@ -260,6 +260,9 @@ if __name__ == '__main__':
 		elif args.model.lower() == "imagenet":
 			# Start from ImageNet trained weights
 			model_path = config.IMAGENET_MODEL_PATH
+		elif args.model.lower() == "continue":
+			# Start from ImageNet trained weights
+			model_path = config.CONTINUE_MODEL_PATH
 		else:
 			model_path = args.model
 	else:

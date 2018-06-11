@@ -22,12 +22,12 @@ import torch
 ROOT_DIR = os.getcwd()
 
 # Directory to save logs and trained model
-MODEL_DIR = os.path.join(ROOT_DIR, "logs")
+MODEL_DIR = ROOT_DIR
 
 # Path to trained weights file
 # Download this file and place in the root of your
 # project (See README file for details)
-MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0018.pth")
+MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0032.pth")
 
 # Directory of images to run detection on
 IMAGE_DIR = os.path.join(ROOT_DIR, "images")
@@ -60,15 +60,27 @@ file_names = sorted(os.listdir(IMAGE_DIR))
 index = random.randint(0,23)
 slice_index = random.randint(20, 35)
 
-netseg_idx = index // 4
-t2_idx = index // 4 + 1
-target_idx = index // 4 + 2
-unc_idx = index // 4 + 3
+netseg_idx = (index // 4) * 4 
+t2_idx = (index // 4) * 4 + 1
+target_idx = (index // 4) * 4 + 2
+unc_idx = (index // 4) * 4 + 3
+
+print(netseg_idx, t2_idx, target_idx, unc_idx)
+
+
 
 netseg, opts = nrrd.read(join(IMAGE_DIR, file_names[netseg_idx]))
 t2, opts = nrrd.read(join(IMAGE_DIR, file_names[t2_idx]))
 target, opts = nrrd.read(join(IMAGE_DIR, file_names[target_idx]))
 unc, opts = nrrd.read(join(IMAGE_DIR, file_names[unc_idx]))
+
+print('Netseg: ', join(IMAGE_DIR, file_names[netseg_idx]))
+
+print('T2: ', join(IMAGE_DIR, file_names[t2_idx]))
+
+print('Target: ', join(IMAGE_DIR, file_names[target_idx]))
+
+print('Uncertainty: ', join(IMAGE_DIR, file_names[unc_idx]))
 
 netseg = np.asarray(netseg)
 t2 = np.asarray(t2)
@@ -80,21 +92,18 @@ image = np.stack([t2[:,:,slice_index], unc[:,:,slice_index], netseg[:,:,slice_in
 # Run detection
 results = model.detect([image])
 
+image = image.transpose(1,2,0)
 
 print(image.shape)
 
+
+imgplt = plt.imshow(t2[:,:,slice_index])
+plt.show()
 # Visualize results
 r = results[0]
-visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'],
-                        class_names, r['scores'])
+print('Masks shape :', r['masks'].shape)
+visualize.display_instances(image, r['rois'], r['masks'], r['class_ids'], class_names, r['scores'])
+plt.show()
 
-
-print('Shape of rois : ', r['masks'].shape)
-'''
-f, axarr = plt.subplots(2,2)
-axarr[0,0].imshow(r['masks'])
-axarr[0,1].imshow(image[:,:,0])
-axarr[1,0].imshow(r['rois'])
-axarr[1,1].imshow(target)'''
-
+imgplt = plt.imshow(target[:,:,slice_index])
 plt.show()

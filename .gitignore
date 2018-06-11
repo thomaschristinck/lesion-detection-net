@@ -6,3 +6,7 @@
 
 #Images
 *.png
+
+#Folders to ignore 
+logs/
+images/

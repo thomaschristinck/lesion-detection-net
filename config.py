@@ -29,6 +29,9 @@ class Config(object):
     # Path to pretrained imagenet model
     IMAGENET_MODEL_PATH = os.path.join(os.getcwd(), "resnet50_imagenet.pth")
 
+    # Path to pretrained model
+    CONTINUE_MODEL_PATH = os.path.join(os.getcwd(), "mask_rcnnn_lesion_mask_rcnn_0032.pth")
+
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
 
@@ -88,7 +91,7 @@ class Config(object):
     # If enabled, resizes instance masks to a smaller size to reduce
     # memory load. Recommended when using high-resolution images.
     USE_MINI_MASK = True
-    MINI_MASK_SHAPE = (56, 56)  # (height, width) of the mini-mask
+    MINI_MASK_SHAPE = (48, 48)  # (height, width) of the mini-mask
 
     # Input image resing
     # Images are resized such that the smallest side is >= IMAGE_MIN_DIM and

@@ -444,10 +444,13 @@ def resize_mask(mask, scale, padding, dims):
 	return mask
 
 
-def minimize_mask(bbox, mask, mini_shape, dims, nles, labels):
+def minimize_mask(bbox, mask, mini_shape, dim):
 	"""Resize masks to a smaller version to cut memory load.
 	Mini-masks can then resized back to image scale using expand_masks()
 	"""
+
+	nles = mask.shape[-1]
+
 	if nles > 0:
 		mini_mask = np.zeros(mini_shape + (nles,), dtype=bool)
 	else:
@@ -496,12 +499,14 @@ def unmold_mask(mask, bbox, image_shape):
 	"""
 	threshold = 0.5
 	y1, x1, y2, x2 = bbox
+	print('Utils mask size :', mask.shape)
 	mask = scipy.misc.imresize(
 		mask, (y2 - y1, x2 - x1), interp='bilinear').astype(np.float32) / 255.0
 	mask = np.where(mask >= threshold, 1, 0).astype(np.uint8)
 
 	# Put the mask in the right location.
 	full_mask = np.zeros(image_shape[:2], dtype=np.uint8)
+	print('Utils mask size :', full_mask.shape)
 	full_mask[y1:y2, x1:x2] = mask
 	return full_mask
 
