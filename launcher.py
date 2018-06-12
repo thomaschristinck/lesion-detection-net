@@ -63,7 +63,7 @@ class DataConfig(Config):
 	# GPU_COUNT = 8
 
 	# Number of classes (including background). Small, medium, and large lesions (each is a 'class')
-	NUM_CLASSES = 4
+	NUM_CLASSES = 2
 
 
 class MSDataset(utils.Dataset):
@@ -111,7 +111,7 @@ class MSDataset(utils.Dataset):
 			self._image_ids = self._image_ids[valid_idx:]
 
 
-		class_ids = ['small', 'medium', 'large']
+		class_ids = ['lesion']
 		for idx, size in enumerate(class_ids):
 			idx += 1
 			self.add_class("MSLAQ", idx, size)
@@ -290,8 +290,23 @@ if __name__ == '__main__':
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE,
-					epochs=40,
+					epochs=10,
 					layers='heads')
+
+		# Training - Stage 2
+		print("Fine tune Resnet stage 4 and up")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE,
+					epochs=5,
+					layers='4+')
+
+		# Training - Stage 3
+		print("Training network heads")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE,
+					epochs=30,
+					layers='heads')
+
 
 		# Training - Stage 2
 		# Finetune layers from ResNet stage 4 and up

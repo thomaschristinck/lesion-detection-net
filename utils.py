@@ -49,7 +49,8 @@ def get_2D_lesion_bin(nvox):
 	else:
 		return 1
 
-def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
+#def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
+def extract_bboxes(mask, dims, buf):
 	"""Compute bounding boxes from masks.
 	mask: [height, width, slice]. Mask pixels are either 1 or 0.
 
@@ -86,14 +87,17 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 			x2 += 1
 			y2 += 1
 			z2 += 1
-			if classes[i-1] == 1:
-				x1 -= sm_buf; x2 += sm_buf; y1 -= sm_buf; y2 += sm_buf; z1 -= sm_buf; z2 += sm_buf
-			elif classes[i-1] == 2:
-				x1 -= med_buf; x2 += med_buf; y1 -= med_buf; y2 += med_buf; z1 -= med_buf; z2 += med_buf
-			else:
-				x1 -= lar_buf; x2 += lar_buf; y1 -= lar_buf; y2 += lar_buf; z1 -= lar_buf; z2 += lar_buf
+			#if classes[i-1] == 1:
+				#x1 -= sm_buf; x2 += sm_buf; y1 -= sm_buf; y2 += sm_buf; z1 -= sm_buf; z2 += sm_buf
+			#elif classes[i-1] == 2:
+				#x1 -= med_buf; x2 += med_buf; y1 -= med_buf; y2 += med_buf; z1 -= med_buf; z2 += med_buf
+			#else:
+				#x1 -= lar_buf; x2 += lar_buf; y1 -= lar_buf; y2 += lar_buf; z1 -= lar_buf; z2 += lar_buf
+			x1 -= buf; x2 += buf; y1 -= buf; y2 += buf; z1 -= buf; z2 += buf
+
 		else:
 			# No mask for this instance
+			print('Error - no mask here')
 			x1, x2, y1, y2, z1, z2 = 0, 0, 0, 0, 0, 0
 	   
 	   # We want 1 box (and 1 lesion mask, and one class) for each lesion
@@ -105,7 +109,6 @@ def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
 		boxes[0] = np.array([y1, x1, y2, x2, z1, z2])	
 	
 	# Reset ground truth mask and then we can draw boxes
-
 	for i in range(1, nb_lesions + 1):
 		mask[labels == i] = 1
 
@@ -131,7 +134,7 @@ def remove_tiny_les(lesion_image, nvox=2):
 		lesion_image[labels != i] = 0
 		lesion_image[labels == i] = 1
 		lesion_size = np.sum(lesion_image[labels == i])
-		class_ids[i-1] = get_2D_lesion_bin(lesion_size)
+		class_ids[i-1] = 1
 
 	# Reset ground truth mask
 	for i in range(1, nles + 1):
@@ -339,7 +342,7 @@ class Dataset(object):
 
 		# Remove small lesions
 		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
-
+		
 		# Return a mask for each lesion instance
 		labels = {}
 		nles = {}
@@ -448,8 +451,9 @@ def minimize_mask(bbox, mask, mini_shape, dim):
 	"""Resize masks to a smaller version to cut memory load.
 	Mini-masks can then resized back to image scale using expand_masks()
 	"""
-
-	nles = mask.shape[-1]
+	labels = {}
+	nles = {}
+	labels, nles = ndimage.label(mask)
 
 	if nles > 0:
 		mini_mask = np.zeros(mini_shape + (nles,), dtype=bool)
@@ -459,7 +463,7 @@ def minimize_mask(bbox, mask, mini_shape, dim):
 	for i in range(nles):	
 		mask[labels != i] = 0
 		mask[labels == i] = 1
-		m = mask
+		m = mask[:,:,i]
 		y1, x1, y2, x2 = bbox[i][:4]
 		m = m[y1:y2, x1:x2]
 		if m.size != 0:
@@ -499,14 +503,12 @@ def unmold_mask(mask, bbox, image_shape):
 	"""
 	threshold = 0.5
 	y1, x1, y2, x2 = bbox
-	print('Utils mask size :', mask.shape)
 	mask = scipy.misc.imresize(
 		mask, (y2 - y1, x2 - x1), interp='bilinear').astype(np.float32) / 255.0
 	mask = np.where(mask >= threshold, 1, 0).astype(np.uint8)
 
 	# Put the mask in the right location.
 	full_mask = np.zeros(image_shape[:2], dtype=np.uint8)
-	print('Utils mask size :', full_mask.shape)
 	full_mask[y1:y2, x1:x2] = mask
 	return full_mask
 

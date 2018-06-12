@@ -733,9 +733,9 @@ def refine_detections(rois, probs, deltas, window, config):
 	"""
 
 	# Class IDs per ROI
+	print('Class probabilities : ', probs)
 	_, class_ids = torch.max(probs, dim=1)
 
-	print('Rois at the start of refining detection : ', rois)
 	# Class probability of the top class of each ROI
 	# Class-specific bounding box deltas
 	idx = torch.arange(class_ids.size()[0]).long()
@@ -757,24 +757,26 @@ def refine_detections(rois, probs, deltas, window, config):
 	if config.GPU_COUNT:
 		scale = scale.cuda()
 	refined_rois *= scale
-	print('Scaled rois : ', refined_rois)
 
 	# Clip boxes to image window
 	refined_rois = clip_to_window(window, refined_rois)
-	print('Rois after clipping to window : ', refined_rois)
 
 	# Round and cast to int since we're deadling with pixels now
 	refined_rois = torch.round(refined_rois)
 
 	# TODO: Filter out boxes with zero area
-
 	# Filter out background boxes
 	keep_bool = class_ids>0
 
 	# Filter out low confidence boxes
 	if config.DETECTION_MIN_CONFIDENCE:
 		keep_bool = keep_bool & (class_scores >= config.DETECTION_MIN_CONFIDENCE)
+
+	#if torch.nonzero(keep_bool).size():
 	keep = torch.nonzero(keep_bool)[:,0]
+	#else:
+	#	keep = torch.zeros(1)
+	#	keep = Variable(keep)
 
 	# Apply per-class NMS
 	pre_nms_class_ids = class_ids[keep.data]
@@ -813,8 +815,6 @@ def refine_detections(rois, probs, deltas, window, config):
 						class_ids[keep.data].unsqueeze(1).float(),
 						class_scores[keep.data].unsqueeze(1)), dim=1)
 
-	print('Refined result : ', refined_rois)
-
 	return result
 
 
@@ -831,7 +831,6 @@ def detection_layer(config, rois, mrcnn_class, mrcnn_bbox, image_meta):
 
 	_, _, window, _ = parse_image_meta(image_meta)
 	window = window[0]
-	print('Window in detection_layer() : ', window)
 	detections = refine_detections(rois, mrcnn_class, mrcnn_bbox, window, config)
 
 	return detections
@@ -1184,11 +1183,11 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# if the corresponding mask got cropped out - trying to fix this
 	# bbox: [num_instances, (y1, x1, y2, x2)]
 
-	bbox = utils.extract_bboxes(gt_mask, class_ids, dims, sm_buf = 1, med_buf = 2, lar_buf = 4)
+	bbox = utils.extract_bboxes(gt_mask, dims, buf = 2)
 
 	# TODO: Resize masks to smaller size to reduce memory usage
-	if use_mini_mask:
-		gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
+	#if use_mini_mask:
+	#	gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
 
 	#gt_mask = gt_mask.astype(np.int32)
 
@@ -1583,7 +1582,6 @@ class MaskRCNN(nn.Module):
 
 		# Convert images to torch tensor
 		molded_images = torch.from_numpy(molded_images.transpose(0, 3, 1, 2)).float()
-		print('Molded images shape :', molded_images.shape)
 
 		# To GPU
 		if self.config.GPU_COUNT:
@@ -1593,10 +1591,7 @@ class MaskRCNN(nn.Module):
 		molded_images = Variable(molded_images, volatile=True)
 
 		# Run object detection
-		print('Image metas going into predict(): ', image_metas)
 		detections, mrcnn_mask = self.predict([molded_images, image_metas], mode='inference')
-
-		print('MRCNN shape :', mrcnn_mask.shape)
 
 		# Convert to numpy
 		detections = detections.data.cpu().numpy()
@@ -1609,7 +1604,7 @@ class MaskRCNN(nn.Module):
 			final_rois, final_class_ids, final_scores, final_masks =\
 				self.unmold_detections(detections[i], mrcnn_mask[i],
 									   image.shape, windows[i])
-			print('MRCNN shape 2:', final_masks.shape)
+			
 			results.append({
 				"rois": final_rois,
 				"class_ids": final_class_ids,
@@ -1676,7 +1671,7 @@ class MaskRCNN(nn.Module):
 			# Detections
 			# output is [batch, num_detections, (y1, x1, y2, x2, class_id, score)] in image coordinates
 			detections = detection_layer(self.config, rpn_rois, mrcnn_class, mrcnn_bbox, image_metas)
-			print('Detection : ', detections)
+	
 			# Convert boxes to normalized coordinates
 			# TODO: let DetectionLayer return normalized coordinates to avoid
 			#       unnecessary conversions
@@ -2035,19 +2030,14 @@ class MaskRCNN(nn.Module):
 		"""
 		# How many detections do we have?
 		# Detections array is padded with zeros. Find the first class_id == 0.
-		print('Image shape :' , image_shape)
-		print('Modified detection shape : ', detections.shape)
-		print('Mask shape : ', mrcnn_mask.shape)
 		zero_ix = np.where(detections[:, 4] == 0)[0]
 		N = zero_ix[0] if zero_ix.shape[0] > 0 else detections.shape[0]
-		print('N is ', N)
+		
 		# Extract boxes, class_ids, scores, and class-specific masks
 		boxes = detections[:N, :4]
-		print('boxes :', boxes)
 		class_ids = detections[:N, 4].astype(np.int32)
 		scores = detections[:N, 5]
 		masks = mrcnn_mask[np.arange(N), :, :, class_ids]
-		print('Shape of masks :', masks.shape)
 
 		# Compute scale and shift to translate coordinates to image domain.
 		h_scale = image_shape[0] / (window[2] - window[0])
@@ -2103,7 +2093,7 @@ def compose_image_meta(image_id, image_shape, window):
 		[image_id] +            # size=1
 		list(image_shape) +     # size=2 or 3
 		list(window) +          # size=4 (y1, x1, y2, x2) in image coordinates
-		list([0,1,2,3])  		# num_classes
+		list([0,1])  			# num_classes
 	)
 	return meta
 

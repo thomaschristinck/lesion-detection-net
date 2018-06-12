@@ -72,7 +72,7 @@ def apply_mask(image, mask, color, alpha=0.5):
     return image
 
 
-def display_instances(image, boxes, masks, class_ids, class_names,
+def display_instances(image, target, boxes, masks, class_ids, class_names,
                       scores=None, title="",
                       figsize=(16, 16), ax=None):
     """
@@ -130,6 +130,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
         # Mask
         mask = masks[:, :, i]
         masked_image = apply_mask(masked_image, mask, color)
+        masked_image = apply_mask(masked_image, target, color)
 
         # Mask Polygon
         # Pad to ensure proper polygons for masks that touch image edges.

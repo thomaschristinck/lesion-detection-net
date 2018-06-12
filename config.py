@@ -63,10 +63,10 @@ class Config(object):
     BACKBONE_STRIDES = [4, 8, 16, 32, 64]
 
     # Number of classification classes (including background)
-    NUM_CLASSES = 4  # Override in sub-classes
+    NUM_CLASSES = 2  # Override in sub-classes
 
     # Length of square anchor side in pixels - divded all by 8
-    RPN_ANCHOR_SCALES = (2, 4, 8, 16, 32)
+    RPN_ANCHOR_SCALES = (2, 8, 16, 32, 64)
 
     # Ratios of anchors at each cell (width/height)
     # A value of 1 represents a square anchor, and 0.5 is a wide anchor
@@ -135,7 +135,7 @@ class Config(object):
 
     # Minimum probability value to accept a detected instance
     # ROIs below this threshold are skipped
-    DETECTION_MIN_CONFIDENCE = 0.7
+    DETECTION_MIN_CONFIDENCE = 0.6
 
     # Non-maximum suppression threshold for detection
     DETECTION_NMS_THRESHOLD = 0.3
