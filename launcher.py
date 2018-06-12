@@ -86,7 +86,6 @@ class MSDataset(utils.Dataset):
 		self._mode = config.get('mode')
 		self._shuffle = config.get('shuffle', True)
 		self._image_ids = np.asarray(self._image_list)
-		#self._image_ids = [i[4:] for i in self._image_ids]
 		self._nb_folds = config.get('nb-folds', 10)
 		self._config = config
 		self._slice_idx = 0
@@ -99,9 +98,9 @@ class MSDataset(utils.Dataset):
 			self._slice_idx = slice_idx
 
 		fold_length = len(self._image_ids) // self._nb_folds
-		
-		train_idx = (((self._nb_folds - 2) * fold_length) // 7) * 7
-		valid_idx = (((self._nb_folds - 1) * fold_length) // 7) * 7
+		mod_number = len(config.MODALITIES)
+		train_idx = (((self._nb_folds - 2) * fold_length) // mod_number) * mod_number
+		valid_idx = (((self._nb_folds - 1) * fold_length) // mod_number) * mod_number
 		
 		if self._mode == 'train':
 			self._image_ids= self._image_ids[:train_idx]
@@ -110,13 +109,6 @@ class MSDataset(utils.Dataset):
 		elif self._mode == 'test':
 			self._image_ids = self._image_ids[valid_idx:]
 
-
-		class_ids = ['lesion']
-		for idx, size in enumerate(class_ids):
-			idx += 1
-			self.add_class("MSLAQ", idx, size)
-		for i in self._image_ids:
-			self.add_image("MSLAQ", image_id=i, path = os.path.join(dataset_dir, i))
 
 	@staticmethod
 	def _rotate(l, n):

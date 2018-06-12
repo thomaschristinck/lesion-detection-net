@@ -144,7 +144,7 @@ class Config(object):
     # The Mask RCNN paper uses lr=0.02, but on TensorFlow it causes
     # weights to explode. Likely due to differences in optimzer
     # implementation.
-    LEARNING_RATE = 0.001
+    LEARNING_RATE = 0.0014
     LEARNING_MOMENTUM = 0.9
 
     # Weight decay regularization

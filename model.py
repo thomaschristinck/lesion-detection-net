@@ -733,7 +733,6 @@ def refine_detections(rois, probs, deltas, window, config):
 	"""
 
 	# Class IDs per ROI
-	print('Class probabilities : ', probs)
 	_, class_ids = torch.max(probs, dim=1)
 
 	# Class probability of the top class of each ROI

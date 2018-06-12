@@ -27,7 +27,7 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 # Path to trained weights file
 # Download this file and place in the root of your
 # project (See README file for details)
-MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0010.pth")
+MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0016.pth")
 
 # Directory of images to run detection on
 IMAGE_DIR = os.path.join(ROOT_DIR, "images")
@@ -81,21 +81,32 @@ image = np.stack([t2[:,:,slice_index], unc[:,:,slice_index], netseg[:,:,slice_in
 results = model.detect([image])
 
 image = image.transpose(1,2,0)
-netseg = netseg.transpose(1,2,0)
+netseg = netseg[:,:,slice_index]
 target = target[:,:,slice_index]
-
-# View T2
-imgplt = plt.imshow(t2[:,:,slice_index])
-plt.show()
 
 # Visualize results
 r = results[0]
+
+# Visualize bounding boxes with target lesions
+print('Plotting stuff.....')
 visualize.display_instances(image, target, r['rois'], r['masks'], r['class_ids'], class_names, r['scores'])
-plt.show()
 
-imgplt = plt.imshow(target)
-plt.show()
+# View the 'ground truth' segmentation
+plt.figure(1)
+plt.imshow(t2[:,:,slice_index], interpolation='nearest', cmap=plt.cm.pink)
+plt.axis('off')
+plt.suptitle('Network Bounding Boxes with Ground Truth Segmentation')
 
-print('Netseg shape :', netseg.shape)
-imgplt = plt.imshow(netseg)
+# View the segmentation output of the BUnet
+plt.figure(2)
+plt.imshow(netseg, cmap=plt.cm.pink)
+plt.axis('off')
+plt.suptitle('BUnet Segmentation')
+
+# View T2
+plt.figure(3)
+plt.imshow(t2[:,:,slice_index], cmap=plt.cm.pink)
+plt.axis('off')
+plt.suptitle('T2 Image')
+
 plt.show()

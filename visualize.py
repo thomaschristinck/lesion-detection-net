@@ -71,6 +71,10 @@ def apply_mask(image, mask, color, alpha=0.5):
     image = np.where(mask == 1, image * (1 - alpha) + alpha * color[0] * 255, image)
     return image
 
+def apply_target(image, target, color, alpha=0.5):
+    
+    image = np.where(target > 0.5, 0, image)
+    return image
 
 def display_instances(image, target, boxes, masks, class_ids, class_names,
                       scores=None, title="",
@@ -84,7 +88,6 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
     figsize: (optional) the size of the image.
     """
     # Number of instances
-    plt.show()
     N = boxes.shape[0]
     if not N:
         print("\n*** No instances to display *** \n")
@@ -94,6 +97,7 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
     if not ax:
         _, ax = plt.subplots(1, figsize=figsize)
 
+    #plt.figure(0)
     # Generate random colors
     colors = random_colors(N)
 
@@ -104,7 +108,7 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
     ax.axis('off')
 
     masked_image = image[:,:,0].copy() #astype(np.uint32)
-    print('Mask :', masks.shape)
+
     for i in range(N):
         color = colors[i]
 
@@ -125,7 +129,7 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
         x = random.randint(x1, (x1 + x2) // 2)
         caption = "{} {:.3f}".format(label, score) if score else label
         ax.text(x1, y1 + 8, caption,
-                color='w', size=11, backgroundcolor="none")
+                color='tab:gray', size=6, backgroundcolor="none")
 
         # Mask
         mask = masks[:, :, i]
@@ -143,10 +147,10 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
             verts = np.fliplr(verts) - 1
             p = Polygon(verts, facecolor="none", edgecolor=color)
             ax.add_patch(p)
-    ax.imshow(masked_image.astype(np.uint8))
+
+    ax.imshow(masked_image, cmap=plt.cm.pink)
     #ax[0,1].imshow(target.astype(np.uint8))
-    plt.show()
-    
+
 
 def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):
     """

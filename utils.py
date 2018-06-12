@@ -231,31 +231,6 @@ class Dataset(object):
 	def __init__(self, class_map=None):
 		self._image_ids = []
 
-		# Background is always the first class
-		self.class_info = [{"source": "", "id": 0, "name": "BG"}]
-
-
-	def add_class(self, source, class_id, class_name):
-		assert "." not in source, "Source name cannot contain a dot"
-		# Does the class exist already?
-		for info in self.class_info:
-			if info['source'] == source and info["id"] == class_id:
-				# source.class_id combination already available, skip
-				return
-		# Add the class
-		self.class_info.append({
-			"source": source,
-			"id": class_id,
-			"name": class_name,
-		})
-
-	def add_image(self, source, image_id, path):
-		image_info = {
-			"id": image_id,
-			"source": source,
-			"path": path,
-		}
-
 	def prepare(self, class_map=None):
 		"""Prepares the Dataset class for use.
 
@@ -267,23 +242,8 @@ class Dataset(object):
 			return name[4:]
 
 		# Build (or rebuild) everything else from the info dicts.
-		self.num_classes = len(self.class_info)
-		self.class_ids = np.arange(self.num_classes)
-		self.class_names = [clean_name(c["name"]) for c in self.class_info]
 		self.num_images = len(self._image_ids)
 		self._image_ids = np.arange(self.num_images)
-
-
-	def append_data(self, class_info, image_info):
-		self.external_to_class_id = {}
-		for i, c in enumerate(self.class_info):
-			for ds, id in c["map"]:
-				self.external_to_class_id[ds + str(id)] = i
-
-		# Map external image IDs to internal ones.
-		self.external_to_image_id = {}
-		for i, info in enumerate(self.image_info):
-			self.external_to_image_id[info["ds"] + str(info["id"])] = i
 
 	@property
 	def image_ids(self):
