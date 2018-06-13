@@ -16,6 +16,8 @@ import random
 import nrrd
 import launcher
 import torch
+import utils
+from scipy import ndimage
 
 
 # Root directory of the project
@@ -75,6 +77,19 @@ t2 = np.asarray(t2)
 target = np.asarray(target)
 unc = np.asarray(unc)
 
+'''
+boxes = utils.extract_bboxes(target[:,:,slice_index], dims=2, buf=2)
+labels = {}
+nles = {}
+labels, nles = ndimage.label(target[:,:,slice_index])
+
+for les in range(nles):
+	img = visualize.draw_box(target[:,:,slice_index], boxes[les, 0:4], color=0.2)
+if nles == 0:
+	img = t2[:,:,slice_index]
+imgplt = plt.imshow(img)
+plt.show()
+'''
 image = np.stack([t2[:,:,slice_index], unc[:,:,slice_index], netseg[:,:,slice_index]], axis = 0)
 
 # Run detection
@@ -93,20 +108,31 @@ visualize.display_instances(image, target, r['rois'], r['masks'], r['class_ids']
 
 # View the 'ground truth' segmentation
 plt.figure(1)
-plt.imshow(t2[:,:,slice_index], interpolation='nearest', cmap=plt.cm.pink)
+plt.imshow(target, cmap=plt.cm.magma)
 plt.axis('off')
 plt.suptitle('Network Bounding Boxes with Ground Truth Segmentation')
 
+plt.savefig('bboxes.png')
+
 # View the segmentation output of the BUnet
 plt.figure(2)
-plt.imshow(netseg, cmap=plt.cm.pink)
+plt.imshow(netseg, cmap=plt.cm.magma)
 plt.axis('off')
 plt.suptitle('BUnet Segmentation')
+plt.savefig('netseg.png')
 
 # View T2
 plt.figure(3)
-plt.imshow(t2[:,:,slice_index], cmap=plt.cm.pink)
+plt.imshow(t2[:,:,slice_index], cmap=plt.cm.magma_r)
 plt.axis('off')
 plt.suptitle('T2 Image')
+plt.savefig('t2.png')
+
+# View T2
+plt.figure(4)
+plt.imshow(unc[:,:,slice_index], cmap=plt.cm.magma)
+plt.axis('off')
+plt.suptitle('Uncertainty')
+plt.savefig('unc.png')
 
 plt.show()

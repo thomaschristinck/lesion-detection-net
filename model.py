@@ -709,7 +709,6 @@ def clip_to_window(window, boxes):
 		window: (y1, x1, y2, x2). The window in the image we want to clip to.
 		boxes: [N, (y1, x1, y2, x2)]
 	"""
-	print('The window we\'re clipping to', window)
 	boxes[:, 0] = boxes[:, 0].clamp(float(window[0]), float(window[2]))
 	boxes[:, 1] = boxes[:, 1].clamp(float(window[1]), float(window[3]))
 	boxes[:, 2] = boxes[:, 2].clamp(float(window[0]), float(window[2]))
@@ -771,11 +770,12 @@ def refine_detections(rois, probs, deltas, window, config):
 	if config.DETECTION_MIN_CONFIDENCE:
 		keep_bool = keep_bool & (class_scores >= config.DETECTION_MIN_CONFIDENCE)
 
-	#if torch.nonzero(keep_bool).size():
-	keep = torch.nonzero(keep_bool)[:,0]
-	#else:
-	#	keep = torch.zeros(1)
-	#	keep = Variable(keep)
+	if torch.nonzero(keep_bool).size():
+		keep = torch.nonzero(keep_bool)[:,0]
+	else:
+		return Variable()
+		#keep_bool = np.array([[1]])
+		#keep = torch.nonzero(keep_bool)[:,0]
 
 	# Apply per-class NMS
 	pre_nms_class_ids = class_ids[keep.data]
@@ -1152,8 +1152,8 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	"""
 	# Load t2 image, uncertainties, and mask
 	t2_image = dataset.load_t2_image(image_id, dataset, config)
-	net_mask, gt_mask, class_ids = dataset.load_masks(image_id, dataset, config)
 	uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
+	net_mask, gt_mask, class_ids = dataset.load_masks(image_id, dataset, config)
 
 	# Now combine image data into a 192 * 192 * 3 image 
 	image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
@@ -1593,17 +1593,24 @@ class MaskRCNN(nn.Module):
 		detections, mrcnn_mask = self.predict([molded_images, image_metas], mode='inference')
 
 		# Convert to numpy
-		detections = detections.data.cpu().numpy()
-		mrcnn_mask = mrcnn_mask.permute(0, 1, 3, 4, 2).data.cpu().numpy()
+		if not detections.size() and not mrcnn_mask.size():
+			detections = np.array([])
+			mrcnn_mask = np.array([])
+		else:
+			detections = detections.data.cpu().numpy()
+			mrcnn_mask = mrcnn_mask.permute(0, 1, 3, 4, 2).data.cpu().numpy()
 
 		# Process detections
 		results = []
 		for i, image in enumerate(images):
 			image = image.transpose(1,2,0)
-			final_rois, final_class_ids, final_scores, final_masks =\
-				self.unmold_detections(detections[i], mrcnn_mask[i],
-									   image.shape, windows[i])
-			
+			if detections.size and mrcnn_mask.size:
+				final_rois, final_class_ids, final_scores, final_masks =\
+					self.unmold_detections(detections[i], mrcnn_mask[i],
+									   	image.shape, windows[i])
+			else:
+				final_rois, final_class_ids, final_scores, final_masks =\
+					np.array([]), np.array([]), np.array([]), np.array([])
 			results.append({
 				"rois": final_rois,
 				"class_ids": final_class_ids,
@@ -1678,7 +1685,12 @@ class MaskRCNN(nn.Module):
 			scale = Variable(torch.from_numpy(np.array([h, w, h, w])).float(), requires_grad=False)
 			if self.config.GPU_COUNT:
 				scale = scale.cuda()
-			detection_boxes = detections[:, :4] / scale
+
+			#Check to see if there are detection boxes
+			if detections.size():
+				detection_boxes = detections[:, :4] / scale
+			else:
+				return [Variable(), Variable()]
 
 			# Add back batch dimension
 			detection_boxes = detection_boxes.unsqueeze(0)
@@ -2066,8 +2078,11 @@ class MaskRCNN(nn.Module):
 			# Convert neural network mask to full size mask
 			full_mask = utils.unmold_mask(masks[i], boxes[i], image_shape)
 			full_masks.append(full_mask)
-		full_masks = np.stack(full_masks, axis=-1)\
-			if full_masks else np.empty((0,) + masks.shape[1:3])
+	
+		if full_masks:
+			full_masks = np.stack(full_masks, axis=-1)
+		else:
+			full_masks = np.empty((0,) + masks.shape[1:3])
 
 		return boxes, class_ids, scores, full_masks
 
