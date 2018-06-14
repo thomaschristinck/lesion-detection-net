@@ -30,7 +30,7 @@ class Config(object):
     IMAGENET_MODEL_PATH = os.path.join(os.getcwd(), "resnet50_imagenet.pth")
 
     # Path to pretrained model
-    CONTINUE_MODEL_PATH = os.path.join(os.getcwd(), "mask_rcnnn_lesion_mask_rcnn_0032.pth")
+    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training1/', "mask_rcnn_lesion_mask_rcnn_0057.pth")
 
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
@@ -135,7 +135,7 @@ class Config(object):
 
     # Minimum probability value to accept a detected instance
     # ROIs below this threshold are skipped
-    DETECTION_MIN_CONFIDENCE = 0.8
+    DETECTION_MIN_CONFIDENCE = 0.9
 
     # Non-maximum suppression threshold for detection
     DETECTION_NMS_THRESHOLD = 0.3

@@ -68,17 +68,10 @@ class DataConfig(Config):
 
 class MSDataset(utils.Dataset):
 
-	def load_data(self, dataset_dir, config, class_ids=None,
-					class_map=None, return_object=False):
-		""" TODO: Remove this and fix model.Dataset
-
-		Load a subset of the dataset. TODO: Remove this and fix model.Dataset
+	def load_data(self, dataset_dir, config):
+		""" 
+		Load a subset of the dataset.
 		dataset_dir: The root directory of the dataset.
-		subset: What to load (train, val)
-		class_ids: TODO: If provided, only loads images that have the given classes.
-		class_map: TODO: Not implemented yet. Supports maping classes from
-			different datasets to the same class ID.
-		return_object: TODO: If True, returns the object.
 		"""
 
 		self._image_list = sorted(listdir(dataset_dir))
@@ -98,7 +91,7 @@ class MSDataset(utils.Dataset):
 			self._slice_idx = slice_idx
 
 		fold_length = len(self._image_ids) // self._nb_folds
-		mod_number = len(config.MODALITIES)
+		mod_number = len(config.get('mods'))
 		train_idx = (((self._nb_folds - 2) * fold_length) // mod_number) * mod_number
 		valid_idx = (((self._nb_folds - 1) * fold_length) // mod_number) * mod_number
 		
@@ -108,6 +101,10 @@ class MSDataset(utils.Dataset):
 			self._image_ids = self._image_ids[train_idx:valid_idx]
 		elif self._mode == 'test':
 			self._image_ids = self._image_ids[valid_idx:]
+
+		# Build (or rebuild) everything else from the info dicts.
+		self.num_images = len(self._image_ids)
+		self._image_ids = np.arange(self.num_images)
 
 
 	@staticmethod
@@ -263,6 +260,7 @@ if __name__ == '__main__':
 	
 	# Load weights
 	print("Loading weights ", model_path)
+	print('Looking for weights here: ', model_path)
 	model.load_weights(model_path)
  
 	# Train or evaluate
@@ -271,13 +269,12 @@ if __name__ == '__main__':
 		# Training dataset (possibly modify so some examples come from validation set as in MaskRCNN paper)
 		dataset_train = MSDataset()
 		dataset_train.load_data(args.dataset, {'mode': 'train', 'shuffle': True if config.SHUFFLE is 1 else False, 'dim': config.BRAIN_DIMENSIONS,'mods': config.MODALITIES})    
-		dataset_train.prepare()
 
 		# Validation dataset
 		dataset_val = MSDataset()
 		dataset_val.load_data(args.dataset, {'mode': 'val', 'shuffle': False, 'dim': config.BRAIN_DIMENSIONS, 'mods': config.MODALITIES})
-		dataset_val.prepare()
 
+		'''
 		# Training - Stage 1
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
@@ -299,28 +296,28 @@ if __name__ == '__main__':
 					epochs=30,
 					layers='heads')
 
-
-		# Training - Stage 2
+		'''
+		# Training - Stage 1
 		# Finetune layers from ResNet stage 4 and up
 		print("Fine tune Resnet stage 4 and up")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE,
-					epochs=120,
+					epochs=30,
 					layers='4+')
 
 		# Training - Stage 3
 		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10,
-					epochs=160,
+					learning_rate=config.LEARNING_RATE / 5, #Changed from 10
+					epochs=80,
 					layers='all')
 
 	elif args.command == "evaluate":
 		# Test dataset
 		dataset_test = MSDataset()
 		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False})
-		dataset_test.prepare()
+	
 		print("Running evaluation on {} images.".format(args.limit))
 		evaluate(model, dataset_test, "bbox", limit=int(args.limit))
 		evaluate(model, dataset_test, "segm", limit=int(args.limit))

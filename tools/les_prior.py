@@ -6,8 +6,8 @@ from os.path import join
 from argparse import ArgumentParser
 '''
 Takes a folder full of .nrrd files and averages the lesion masks - outputs a "lesion prior".
-Lesion masks used in /usr/local/data/thomasc/unet_out/all_img are linearly co-registered
-(MSLAQ). 
+Files that contain lesion masks should end in 'target.nrrd'. Lesion masks used in /usr/local/data/thomasc/unet_out/all_img 
+are linearly co-registered (MSLAQ). 
 TO DO - make a lesion prior with masks from non-linearly co-registered MSLAQ data (also 
 registered to patients) 
 '''

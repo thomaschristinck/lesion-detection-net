@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import visualize
 
 '''
-Tanya's Lesion counter - going to use this to create ground truth bounding boxes with classes S, M, L.
+Functions for removing tiny lesions/getting lesion bins are from Tanya's Lesion counter.
+I use it to create 'ground truth' bounding boxes.
+
+TODO: Make a more intelligent bounding-boxer
 '''
 
 def remove_tiny_les(lesion_image, nvox=2):

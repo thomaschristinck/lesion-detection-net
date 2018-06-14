@@ -1179,7 +1179,7 @@ def load_image_gt(dataset, config, image_id, augment=False,
 			gt_mask = np.fliplr(gt_mask)
 		
 	# Bounding boxes. Note that some boxes might be all zeros
-	# if the corresponding mask got cropped out - trying to fix this
+	# if the corresponding mask got cropped out 
 	# bbox: [num_instances, (y1, x1, y2, x2)]
 
 	bbox = utils.extract_bboxes(gt_mask, dims, buf = 2)
@@ -1187,8 +1187,6 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# TODO: Resize masks to smaller size to reduce memory usage
 	#if use_mini_mask:
 	#	gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
-
-	#gt_mask = gt_mask.astype(np.int32)
 
 	image_meta = compose_image_meta(image_id, shape, window)
 
@@ -1519,7 +1517,7 @@ class MaskRCNN(nn.Module):
 		self.checkpoint_path = os.path.join(self.log_dir, "mask_rcnn_{}_*epoch*.pth".format(
 			self.config.NAME.lower()))
 		self.checkpoint_path = self.checkpoint_path.replace(
-			"*epoch*", "{:04d}")
+			"*epoch*", "0057")
 
 	def find_last(self):
 		"""Finds the last checkpoint file of the last trained model in the

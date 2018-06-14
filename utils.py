@@ -17,16 +17,13 @@ from scipy import ndimage
 
 import matplotlib.pyplot as plt
 
-'''
-TODO:
-X Easy: fix clas_ids for 2D case, where classes are indexed according to a slice (we can still use the voxel criteria on slices for 2D) 
-- Hard: fix torch.from_numpy conversion memory resizing error
-- Medium: make sure resizing does not distort data (lesion mask and t2 images still allign for ex.)
-- Fix NoneType return when there are no lesions
-'''
 ############################################################
 #  Bounding Boxes
 ############################################################
+'''
+Lesion bin and tiny lesion removal functions provided from Tanya's BUnet code
+'''
+
 def get_3D_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
 	if 3 <= nvox <= 10:
@@ -49,13 +46,43 @@ def get_2D_lesion_bin(nvox):
 	else:
 		return 1
 
-#def extract_bboxes(mask, classes, dims, sm_buf, med_buf, lar_buf):
+def remove_tiny_les(lesion_image, nvox=2):
+	labels, nles = ndimage.label(lesion_image)
+	class_ids = np.zeros([nles, 1], dtype=np.int32)
+
+	for i in range(1, nles + 1):
+		nb_vox = np.sum(lesion_image[labels == i])
+		if nb_vox <= nvox:
+			lesion_image[labels == i] = 0
+
+		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
+		lesion_image[labels != i] = 0
+		lesion_image[labels == i] = 1
+		lesion_size = np.sum(lesion_image[labels == i])
+		if lesion_size > 0:
+			class_ids[i-1] = 1
+
+	# Reset ground truth mask
+	for i in range(1, nles + 1):
+		lesion_image[labels == i] = 1
+
+	class_ids = np.asarray(class_ids)
+
+	if class_ids.size == 0:
+		class_ids = np.zeros([1, 1], dtype=np.int32)
+		class_ids[0] = 0
+
+	return lesion_image, class_ids
+
 def extract_bboxes(mask, dims, buf):
-	"""Compute bounding boxes from masks.
+	"""Compute bounding boxes from masks. Could vary 'buf' based on lesion bin
+	classes. Removed this feature for now as the multiple classes confuses the RPN.
+
 	mask: [height, width, slice]. Mask pixels are either 1 or 0.
 
 	Returns: if 2D - bbox array [num_instances, (y1, x1, y2, x2, class_id)].
 			if 3D - bbox array [num_instances, (y1, x1, y2, x2, class_id)].
+
 	"""
 
 	labels = {}
@@ -87,12 +114,7 @@ def extract_bboxes(mask, dims, buf):
 			x2 += 1
 			y2 += 1
 			z2 += 1
-			#if classes[i-1] == 1:
-				#x1 -= sm_buf; x2 += sm_buf; y1 -= sm_buf; y2 += sm_buf; z1 -= sm_buf; z2 += sm_buf
-			#elif classes[i-1] == 2:
-				#x1 -= med_buf; x2 += med_buf; y1 -= med_buf; y2 += med_buf; z1 -= med_buf; z2 += med_buf
-			#else:
-				#x1 -= lar_buf; x2 += lar_buf; y1 -= lar_buf; y2 += lar_buf; z1 -= lar_buf; z2 += lar_buf
+		
 			x1 -= buf; x2 += buf; y1 -= buf; y2 += buf; z1 -= buf; z2 += buf
 
 		else:
@@ -118,35 +140,6 @@ def extract_bboxes(mask, dims, buf):
 		return boxes.astype(np.int32)
 	else:
 		return boxes.astype(np.int32)
-
-
-
-def remove_tiny_les(lesion_image, nvox=2):
-	labels, nles = ndimage.label(lesion_image)
-	class_ids = np.zeros([nles, 1], dtype=np.int32)
-
-	for i in range(1, nles + 1):
-		nb_vox = np.sum(lesion_image[labels == i])
-		if nb_vox <= nvox:
-			lesion_image[labels == i] = 0
-
-		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
-		lesion_image[labels != i] = 0
-		lesion_image[labels == i] = 1
-		lesion_size = np.sum(lesion_image[labels == i])
-		class_ids[i-1] = 1
-
-	# Reset ground truth mask
-	for i in range(1, nles + 1):
-		lesion_image[labels == i] = 1
-
-	class_ids = np.asarray(class_ids)
-
-	if class_ids.size == 0:
-		class_ids = np.zeros([1, 1], dtype=np.int32)
-		class_ids[0] = 0
-
-	return lesion_image, class_ids
 
 def compute_2D_iou(box, boxes, box_area, boxes_area):
 	"""Calculates IoU of the given box with the array of the given boxes.
@@ -230,25 +223,6 @@ class Dataset(object):
 
 	def __init__(self, class_map=None):
 		self._image_ids = []
-
-	def prepare(self, class_map=None):
-		"""Prepares the Dataset class for use.
-
-		TODO: class map is not supported yet. When done, it should handle mapping
-			  classes from different datasets to the same class ID.
-		"""
-		def clean_name(name):
-			"""Returns a shorter version of object names for cleaner display."""
-			return name[4:]
-
-		# Build (or rebuild) everything else from the info dicts.
-		self.num_images = len(self._image_ids)
-		self._image_ids = np.arange(self.num_images)
-
-	@property
-	def image_ids(self):
-		return self._image_ids
-
 
 	def load_t2_image(self, image_id, dataset, config):
 		"""Load the specified image and return a [H,W] Numpy array.
