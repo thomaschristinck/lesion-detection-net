@@ -295,7 +295,6 @@ if __name__ == '__main__':
 					learning_rate=config.LEARNING_RATE,
 					epochs=30,
 					layers='heads')
-
 		'''
 		# Training - Stage 1
 		# Finetune layers from ResNet stage 4 and up

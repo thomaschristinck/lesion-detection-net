@@ -1517,7 +1517,7 @@ class MaskRCNN(nn.Module):
 		self.checkpoint_path = os.path.join(self.log_dir, "mask_rcnn_{}_*epoch*.pth".format(
 			self.config.NAME.lower()))
 		self.checkpoint_path = self.checkpoint_path.replace(
-			"*epoch*", "0057")
+			"*epoch*", "{:04d}")
 
 	def find_last(self):
 		"""Finds the last checkpoint file of the last trained model in the

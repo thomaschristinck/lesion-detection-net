@@ -97,7 +97,6 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
     if not ax:
         _, ax = plt.subplots(1, figsize=figsize)
 
-    #plt.figure(0)
     # Generate random colors
     colors = random_colors(N)
 

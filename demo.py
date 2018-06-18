@@ -29,7 +29,7 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 # Path to trained weights file
 # Download this file and place in the root of your
 # project (See README file for details)
-MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0051.pth")
+MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0057.pth")
 
 # Directory of images to run detection on
 IMAGE_DIR = os.path.join(ROOT_DIR, "images")
@@ -67,10 +67,13 @@ t2_idx = (index // 4) * 4 + 1
 target_idx = (index // 4) * 4 + 2
 unc_idx = (index // 4) * 4 + 3
 
+print('Target file : ', join(IMAGE_DIR, file_names[t2_idx]))
 netseg, opts = nrrd.read(join(IMAGE_DIR, file_names[netseg_idx]))
 t2, opts = nrrd.read(join(IMAGE_DIR, file_names[t2_idx]))
 target, opts = nrrd.read(join(IMAGE_DIR, file_names[target_idx]))
 unc, opts = nrrd.read(join(IMAGE_DIR, file_names[unc_idx]))
+
+target, _ = utils.remove_tiny_les(target)
 
 netseg = np.asarray(netseg)
 t2 = np.asarray(t2)
