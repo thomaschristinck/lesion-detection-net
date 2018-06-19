@@ -126,7 +126,7 @@ plt.savefig('netseg.png')
 
 # View T2
 plt.figure(3)
-plt.imshow(t2[:,:,slice_index], cmap=plt.cm.magma_r)
+plt.imshow(t2[:,:,slice_index], cmap=plt.cm.pink_r)
 plt.axis('off')
 plt.suptitle('T2 Image')
 plt.savefig('t2.png')

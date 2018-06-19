@@ -133,7 +133,7 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
         # Mask
         mask = masks[:, :, i]
         masked_image = apply_mask(masked_image, mask, color)
-        masked_image = apply_mask(masked_image, target, color)
+        #masked_image = apply_mask(masked_image, target, color)
 
         # Mask Polygon
         # Pad to ensure proper polygons for masks that touch image edges.
