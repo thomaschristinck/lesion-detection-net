@@ -126,7 +126,7 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
         score = scores[i] if scores is not None else None
         label = class_names[class_id]
         x = random.randint(x1, (x1 + x2) // 2)
-        caption = "{} {:.3f}".format(label, score) if score else label
+        caption = "{:.3f}".format(score)
         ax.text(x1, y1 + 8, caption,
                 color='tab:gray', size=6, backgroundcolor="none")
 

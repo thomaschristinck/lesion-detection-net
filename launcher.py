@@ -244,15 +244,14 @@ if __name__ == '__main__':
 
 	# Select weights file to load
 	if args.model:
-		if args.model.lower() == "last":
-			model_path = model.find_last()[1]
+		if args.model.lower() == "continue":
+			# Start from weights (path set in config)
+			model_path = config.CONTINUE_MODEL_PATH
 		elif args.model.lower() == "imagenet":
 			# Start from ImageNet trained weights
 			model_path = config.IMAGENET_MODEL_PATH
-		elif args.model.lower() == "continue":
-			# Start from ImageNet trained weights
-			model_path = config.CONTINUE_MODEL_PATH
 		else:
+			#Start from weights (path specified as --model=/path/to/weights)
 			model_path = args.model
 	else:
 		model_path = ""
@@ -297,11 +296,18 @@ if __name__ == '__main__':
 					layers='heads')
 		'''
 		# Training - Stage 1
-		# Finetune layers from ResNet stage 4 and up
-		print("Fine tune Resnet stage 4 and up")
+		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE,
-					epochs=30,
+					epochs=10,
+					layers='heads')
+
+		# Training - Stage 2
+		# Train ResNet stage 4 and up
+		print("Train Resnet stage 4 and up")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE,
+					epochs=15,
 					layers='4+')
 
 		# Training - Stage 3
@@ -309,8 +315,16 @@ if __name__ == '__main__':
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE / 5, #Changed from 10
-					epochs=80,
+					epochs=25,
 					layers='all')
+
+		# Training - Stage 4
+		# Finetune layers from ResNet stage 4 and up
+		print("Fine tune Resnet stage 4 and up")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE / 5,
+					epochs=40,
+					layers='4+')
 
 	elif args.command == "evaluate":
 		# Test dataset

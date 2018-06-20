@@ -29,7 +29,7 @@ MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 # Path to trained weights file
 # Download this file and place in the root of your
 # project (See README file for details)
-MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0057.pth")
+MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0001.pth")
 
 # Directory of images to run detection on
 IMAGE_DIR = os.path.join(ROOT_DIR, "images")
@@ -59,7 +59,7 @@ class_names = ['BG', 'lesion']
 
 # Load a random image from the images folder
 file_names = sorted(os.listdir(IMAGE_DIR))
-index = random.randint(0,23)
+index = random.randint(0,11)
 slice_index = random.randint(20, 35)
 
 netseg_idx = (index // 4) * 4 

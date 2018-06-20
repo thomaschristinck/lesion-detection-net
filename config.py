@@ -30,7 +30,7 @@ class Config(object):
     IMAGENET_MODEL_PATH = os.path.join(os.getcwd(), "resnet50_imagenet.pth")
 
     # Path to pretrained model
-    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training1/', "mask_rcnn_lesion_mask_rcnn_0100.pth")
+    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training1/', "mask_rcnn_lesion_mask_rcnn_0131.pth")
 
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
@@ -144,7 +144,7 @@ class Config(object):
     # The Mask RCNN paper uses lr=0.02, but on TensorFlow it causes
     # weights to explode. Likely due to differences in optimzer
     # implementation.
-    LEARNING_RATE = 0.0014
+    LEARNING_RATE = 0.002  #originally 0.0014
     LEARNING_MOMENTUM = 0.9
 
     # Weight decay regularization

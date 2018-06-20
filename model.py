@@ -1874,7 +1874,8 @@ class MaskRCNN(nn.Module):
 
 			# Backpropagation
 			loss.backward()
-			torch.nn.utils.clip_grad_norm(self.parameters(), 5.0)
+			# Trying a lower limit for gradient clipping (5.0 originally)
+			torch.nn.utils.clip_grad_norm(self.parameters(), 2.0)
 			if (batch_count % self.config.BATCH_SIZE) == 0:
 				optimizer.step()
 				optimizer.zero_grad()
