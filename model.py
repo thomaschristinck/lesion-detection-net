@@ -1165,11 +1165,6 @@ def load_image_gt(dataset, config, image_id, augment=False,
 		max_dim=config.IMAGE_MAX_DIM,
 		padding=config.IMAGE_PADDING,
 		dims=config.BRAIN_DIMENSIONS)
-
-	# Count number of lesions and embed into image metadeta
-	labels = {}
-    nles = {}
-    labels, nles = ndimage.label(gt_mask)
 	
 	# Resize masks - ultimately will compress lesion mask size to save memory (refer to Mask RCNN Paper)
 	dims=config.BRAIN_DIMENSIONS
@@ -2001,10 +1996,6 @@ class MaskRCNN(nn.Module):
 		for image in images:
 			# Resize image to fit the model expected size
 			# TODO: move resizing to mold_image()
-
-			labels = {}
-    		nles = {}
-    		labels, nles = ndimage.label(gt_mask)
 
 			molded_image, window, scale, padding = utils.resize_image(
 				image,
