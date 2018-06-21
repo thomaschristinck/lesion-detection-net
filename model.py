@@ -1166,13 +1166,16 @@ def load_image_gt(dataset, config, image_id, augment=False,
 		padding=config.IMAGE_PADDING,
 		dims=config.BRAIN_DIMENSIONS)
 
-	#Resize masks - ultimately will compress lesion mask size to save memory (refer to Mask RCNN Paper)
-
+	# Count number of lesions and embed into image metadeta
+	labels = {}
+    nles = {}
+    labels, nles = ndimage.label(gt_mask)
+	
+	# Resize masks - ultimately will compress lesion mask size to save memory (refer to Mask RCNN Paper)
 	dims=config.BRAIN_DIMENSIONS
 	gt_mask = utils.resize_mask(gt_mask, scale, padding, dims)
 
 	# Random horizontal flips.
-	
 	if augment:
 		if random.randint(0, 1):
 			image = np.fliplr(image)
@@ -1181,13 +1184,11 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# Bounding boxes. Note that some boxes might be all zeros
 	# if the corresponding mask got cropped out 
 	# bbox: [num_instances, (y1, x1, y2, x2)]
-
 	bbox = utils.extract_bboxes(gt_mask, dims, buf = 2)
 
 	# TODO: Resize masks to smaller size to reduce memory usage
-	#if use_mini_mask:
-	#	gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
-
+	# if use_mini_mask:
+	# gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
 	image_meta = compose_image_meta(image_id, shape, window)
 
 	return image, class_ids, bbox, gt_mask, image_meta
@@ -2000,6 +2001,11 @@ class MaskRCNN(nn.Module):
 		for image in images:
 			# Resize image to fit the model expected size
 			# TODO: move resizing to mold_image()
+
+			labels = {}
+    		nles = {}
+    		labels, nles = ndimage.label(gt_mask)
+
 			molded_image, window, scale, padding = utils.resize_image(
 				image,
 				min_dim=self.config.IMAGE_MIN_DIM,
@@ -2008,7 +2014,7 @@ class MaskRCNN(nn.Module):
 			molded_image = mold_image(molded_image, self.config)
 			# Build image_meta
 			image_meta = compose_image_meta(
-				0, image.shape, window)
+				0, image.shape, window, 0)
 			# Append
 			molded_images.append(molded_image)
 			windows.append(window)
@@ -2106,7 +2112,7 @@ def compose_image_meta(image_id, image_shape, window):
 		[image_id] +            # size=1
 		list(image_shape) +     # size=2 or 3
 		list(window) +          # size=4 (y1, x1, y2, x2) in image coordinates
-		list([0,1])  			# num_classes
+		list([0,1]) 			# num_classes
 	)
 	return meta
 
@@ -2121,9 +2127,8 @@ def parse_image_meta(meta):
 	#DIMENSION-related. Change later (indices for image shape change)
 	image_shape = meta[:, 1:4]
 	window = meta[:, 4:8]   # (y1, x1, y2, x2) window of image in in pixels DIMENSION-related
-	active_class_ids = meta[:, 8:]
+	active_class_ids = meta[:, 8:10]
 	return image_id, image_shape, window, active_class_ids
-
 
 def mold_image(images, config):
 	"""Takes RGB images with 0-255 values and subtraces

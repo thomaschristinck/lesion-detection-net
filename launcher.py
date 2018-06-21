@@ -123,6 +123,7 @@ def build_results(dataset, image_ids, rois, class_ids, scores, masks):
 		return []
 
 	results = []
+	gts = []
 	for image_id in image_ids:
 		# Loop through detections
 		for i in range(rois.shape[0]):
@@ -138,10 +139,26 @@ def build_results(dataset, image_ids, rois, class_ids, scores, masks):
 				"segmentation": np.asfortranarray(mask)
 			}
 			results.append(result)
-	return results
 
 
-def evaluate(model, dataset, eval_type="bbox", limit=0, image_ids=None):
+		net_mask, gt_masks, class_ids = utils.load_masks(image_id(dataset))
+		lesions = {}
+		nb_les = {}
+
+		for les in range(nb_les):
+
+			gt = {
+				"image_id": image_id,
+				"bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
+				"score": score,
+				"segmentation": np.asfortranarray(gt_mask[:,:,les])
+			}
+			gts.append(gt)
+	
+	return gts, results
+
+
+def evaluate(model, config, dataset, eval_type="bbox", limit=0, image_ids=None):
 	"""Runs official evaluation.
 	dataset: A Dataset object with validation data
 	eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
@@ -163,24 +180,26 @@ def evaluate(model, dataset, eval_type="bbox", limit=0, image_ids=None):
 	results = []
 	for i, image_id in enumerate(image_ids):
 		# Load image
-		image = dataset.load_image(image_id)
+		t2_image = dataset.load_t2_image(image_id, dataset, config)
+		uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
+		net_mask, gt_masks, class_ids = dataset.load_t2_image(image_id, dataset, config)
+
+		image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
 
 		# Run detection
 		t = time.time()
 		r = model.detect([image])[0]
 		t_prediction += (time.time() - t)
 
-		# Convert results to COCO format
-		image_results = build_coco_results(dataset, image_ids[i:i + 1],
+		# Convert results
+		image_results = build_results(dataset, image_ids[i:i + 1],
 										   r["rois"], r["class_ids"],
 										   r["scores"], r["masks"])
 		results.extend(image_results)
 
-	# Load results. This modifies results with additional attributes.
-	coco_results = coco.loadRes(results)
 
 	# Evaluate
-	Eval = eval(results, eval_type)
+	Eval = Evaluate(config, gt, results, eval_type)
 	Eval.params.imgIds = image_ids
 	Eval.evaluate()
 	Eval.accumulate()
@@ -332,8 +351,8 @@ if __name__ == '__main__':
 		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False})
 	
 		print("Running evaluation on {} images.".format(args.limit))
-		evaluate(model, dataset_test, "bbox", limit=int(args.limit))
-		evaluate(model, dataset_test, "segm", limit=int(args.limit))
+		evaluate(model, dataset_test, config, "bbox", limit=int(args.limit))
+		evaluate(model, dataset_test, config, "segm", limit=int(args.limit))
 	else:
 		print("'{}' is not recognized. "
 			  "Use 'train' or 'evaluate'".format(args.command))

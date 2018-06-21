@@ -59,7 +59,7 @@ class_names = ['BG', 'lesion']
 
 # Load a random image from the images folder
 file_names = sorted(os.listdir(IMAGE_DIR))
-index = random.randint(0,11)
+index = random.randint(0,10)
 slice_index = random.randint(20, 35)
 
 netseg_idx = (index // 4) * 4 
