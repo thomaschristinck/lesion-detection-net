@@ -30,7 +30,7 @@ class Config(object):
     IMAGENET_MODEL_PATH = os.path.join(os.getcwd(), "resnet50_imagenet.pth")
 
     # Path to pretrained model
-    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0015.pth")
+    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0010.pth")
 
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1

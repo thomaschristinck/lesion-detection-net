@@ -32,6 +32,9 @@ from os.path import join
 from os import listdir
 import model as modellib
 from model import Dataset
+from scipy import ndimage
+
+from tools.evaluate import Evaluate
 
 # Root directory of the project
 ROOT_DIR = os.getcwd()
@@ -115,7 +118,8 @@ class MSDataset(utils.Dataset):
 #  Evaluation
 ############################################################
 
-def build_results(dataset, image_ids, rois, class_ids, scores, masks):
+def build_results(dataset, image_ids, rois, class_ids, scores, masks, gt_bbox, 
+							gt_class_id, gt_mask):
 	"""Arrange resutls 
 	"""
 	# If no results, return an empty list
@@ -140,22 +144,21 @@ def build_results(dataset, image_ids, rois, class_ids, scores, masks):
 			}
 			results.append(result)
 
-
-		net_mask, gt_masks, class_ids = utils.load_masks(image_id(dataset))
 		lesions = {}
 		nb_les = {}
+		labels, nb_les = ndimage.label(gt_mask)
 
+		# Loop through ground truth lesions
 		for les in range(nb_les):
-
+			bbox = gt_bbox[les] 
 			gt = {
 				"image_id": image_id,
 				"bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
-				"score": score,
 				"segmentation": np.asfortranarray(gt_mask[:,:,les])
 			}
 			gts.append(gt)
 	
-	return gts, results
+	return results, gts
 
 
 def evaluate(model, config, dataset, eval_type="bbox", limit=0, image_ids=None):
@@ -165,26 +168,25 @@ def evaluate(model, config, dataset, eval_type="bbox", limit=0, image_ids=None):
 	limit: if not 0, it's the number of images to use for evaluation
 	"""
 	# Pick images from the dataset
-	image_ids = image_ids or dataset.image_ids
+	image_ids = image_ids or dataset._image_ids
 
 	# Limit to a subset
 	if limit:
 		image_ids = image_ids[:limit]
 
-	# Get corresponding image IDs.
-	subj_ids = [dataset.image_info[id]["id"] for id in image_ids]
-
 	t_prediction = 0
 	t_start = time.time()
 
 	results = []
+	gts = []
 	for i, image_id in enumerate(image_ids):
 		# Load image
 		t2_image = dataset.load_t2_image(image_id, dataset, config)
 		uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
-		net_mask, gt_masks, class_ids = dataset.load_t2_image(image_id, dataset, config)
+		net_mask, gt_masks, gt_class_ids = dataset.load_masks(image_id, dataset, config)
 
 		image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
+		gt_bboxes = utils.extract_bboxes(gt_masks, dims=2, buf=2)
 
 		# Run detection
 		t = time.time()
@@ -192,14 +194,17 @@ def evaluate(model, config, dataset, eval_type="bbox", limit=0, image_ids=None):
 		t_prediction += (time.time() - t)
 
 		# Convert results
-		image_results = build_results(dataset, image_ids[i:i + 1],
+		image_results, gt_results = build_results(dataset, image_ids[i:i + 1],
 										   r["rois"], r["class_ids"],
-										   r["scores"], r["masks"])
+										   r["scores"], r["masks"],
+										   gt_bboxes, gt_class_ids,
+										   gt_masks)
+		gts.extend(gt_results)
 		results.extend(image_results)
 
 
 	# Evaluate
-	Eval = Evaluate(config, gt, results, eval_type)
+	Eval = Evaluate(config, gts, results, eval_type)
 	Eval.params.imgIds = image_ids
 	Eval.evaluate()
 	Eval.accumulate()
@@ -278,7 +283,6 @@ if __name__ == '__main__':
 	
 	# Load weights
 	print("Loading weights ", model_path)
-	print('Looking for weights here: ', model_path)
 	model.load_weights(model_path)
  
 	# Train or evaluate
@@ -325,7 +329,7 @@ if __name__ == '__main__':
 		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE, #Changed from 10
+					learning_rate=config.LEARNING_RATE / 5, #Changed from 10
 					epochs=25,
 					layers='all')
 
@@ -340,11 +344,11 @@ if __name__ == '__main__':
 	elif args.command == "evaluate":
 		# Test dataset
 		dataset_test = MSDataset()
-		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False})
+		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False, 'mods': config.MODALITIES})
 	
 		print("Running evaluation on {} images.".format(args.limit))
-		evaluate(model, dataset_test, config, "bbox", limit=int(args.limit))
-		evaluate(model, dataset_test, config, "segm", limit=int(args.limit))
+		evaluate(model, config, dataset_test, "bbox", limit=int(args.limit))
+		evaluate(model, config, dataset_test, "segm", limit=int(args.limit))
 	else:
 		print("'{}' is not recognized. "
 			  "Use 'train' or 'evaluate'".format(args.command))

@@ -2005,7 +2005,7 @@ class MaskRCNN(nn.Module):
 			molded_image = mold_image(molded_image, self.config)
 			# Build image_meta
 			image_meta = compose_image_meta(
-				0, image.shape, window, 0)
+				0, image.shape, window)
 			# Append
 			molded_images.append(molded_image)
 			windows.append(window)
