@@ -34,7 +34,6 @@ import model as modellib
 from model import Dataset
 from scipy import ndimage
 
-from tools.evaluate import Evaluate
 from analyze.mrcnn_analyzer import MRCNNAnalyzer
 
 # Root directory of the project

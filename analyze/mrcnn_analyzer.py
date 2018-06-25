@@ -92,7 +92,7 @@ class MRCNNAnalyzer:
                     gt_masks = gt_masks.cuda()
 
                 # Run detection
-                results = self.__model.detect([image])
+                results = self.__model.detect([images])
                 results = np.asarray(results['rois'], np.float32)[..., 0]
                 h = sigmoid(np.mean(results, 0))
                 print(h)
