@@ -1976,8 +1976,6 @@ class MaskRCNN(nn.Module):
 
 		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
 
-
-
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
 		as an input to the neural network.

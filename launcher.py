@@ -35,6 +35,7 @@ from model import Dataset
 from scipy import ndimage
 
 from tools.evaluate import Evaluate
+from analyze.mrcnn_analyzer import MRCNNAnalyzer
 
 # Root directory of the project
 ROOT_DIR = os.getcwd()
@@ -330,7 +331,7 @@ if __name__ == '__main__':
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE / 5, #Changed from 10
-					epochs=25,
+					epochs=10,
 					layers='all')
 
 		# Training - Stage 4
@@ -338,7 +339,7 @@ if __name__ == '__main__':
 		print("Fine tune Resnet stage 4 and up")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE / 5,
-					epochs=40,
+					epochs=15,
 					layers='4+')
 
 	elif args.command == "evaluate":
@@ -347,8 +348,11 @@ if __name__ == '__main__':
 		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False, 'mods': config.MODALITIES})
 	
 		print("Running evaluation on {} images.".format(args.limit))
-		evaluate(model, config, dataset_test, "bbox", limit=int(args.limit))
-		evaluate(model, config, dataset_test, "segm", limit=int(args.limit))
+		#TODO; evaluate bounding box and segmentation separately
+		analyzer = MRCNNAnalyzer(model, config, dataset_test, args.logs, nb_mc=2)
+		sigmoid_thresh=0.01
+		analyzer.cca('test_stats_thresh{}.csv'.format(sigmoid_thresh), sigmoid_thresh)
+		
 	else:
 		print("'{}' is not recognized. "
 			  "Use 'train' or 'evaluate'".format(args.command))
