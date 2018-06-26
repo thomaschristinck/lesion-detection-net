@@ -73,7 +73,10 @@ t2, opts = nrrd.read(join(IMAGE_DIR, file_names[t2_idx]))
 target, opts = nrrd.read(join(IMAGE_DIR, file_names[target_idx]))
 unc, opts = nrrd.read(join(IMAGE_DIR, file_names[unc_idx]))
 
-target, _ = utils.remove_tiny_les(target)
+target, _ = utils.remove_tiny_les(target[:,:,slice_index])
+netseg = netseg[:,:,slice_index]
+t2 = t2[:,:,slice_index]
+unc = unc[:,:,slice_index]
 
 netseg = np.asarray(netseg)
 t2 = np.asarray(t2)
@@ -93,14 +96,12 @@ if nles == 0:
 imgplt = plt.imshow(img)
 plt.show()
 '''
-image = np.stack([t2[:,:,slice_index], unc[:,:,slice_index], netseg[:,:,slice_index]], axis = 0)
+image = np.stack([t2, unc, netseg], axis = 0)
 
 # Run detection
 results = model.detect([image])
 
 image = image.transpose(1,2,0)
-netseg = netseg[:,:,slice_index]
-target = target[:,:,slice_index]
 
 # Visualize results
 r = results[0]
@@ -126,14 +127,14 @@ plt.savefig('netseg.png')
 
 # View T2
 plt.figure(3)
-plt.imshow(t2[:,:,slice_index], cmap=plt.cm.pink_r)
+plt.imshow(t2, cmap=plt.cm.pink_r)
 plt.axis('off')
 plt.suptitle('T2 Image')
 plt.savefig('t2.png')
 
 # View T2
 plt.figure(4)
-plt.imshow(unc[:,:,slice_index], cmap=plt.cm.magma)
+plt.imshow(unc, cmap=plt.cm.magma)
 plt.axis('off')
 plt.suptitle('Uncertainty')
 plt.savefig('unc.png')

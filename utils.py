@@ -59,7 +59,7 @@ def remove_tiny_les(lesion_image, nvox=2):
 		lesion_image[labels != i] = 0
 		lesion_image[labels == i] = 1
 		lesion_size = np.sum(lesion_image[labels == i])
-		if lesion_size > 0:
+		if nb_vox > nvox:
 			class_ids[i-1] = 1
 
 	# Reset ground truth mask
