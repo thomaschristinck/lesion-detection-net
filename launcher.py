@@ -347,14 +347,15 @@ if __name__ == '__main__':
 		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False, 'mods': config.MODALITIES})
 	
 		print("Running evaluation on {} images.".format(args.limit))
-		#TODO; evaluate bounding box and segmentation separately
+		#TODO; evaluate bounding box (mode='bbox') and segmentation (mode='segm') separately
+
+		model.evaluate_model(model, dataset_test, args.logs, nb_mc=10, mode='bbox')
+		'''
 		analyzer = MRCNNAnalyzer(model, config, dataset_test, args.logs, nb_mc=2)
 		sigmoid_thresh=0.01
 		analyzer.cca('test_stats_thresh{}.csv'.format(sigmoid_thresh), sigmoid_thresh)
+		'''
 		
 	else:
 		print("'{}' is not recognized. "
 			  "Use 'train' or 'evaluate'".format(args.command))
-
-# Train a new model starting from ImageNet weights
-# python launcher.py train --dataset='/usr/local/data/thomasc/unet_out/all_img' --model=imagenet

@@ -1515,31 +1515,6 @@ class MaskRCNN(nn.Module):
 		self.checkpoint_path = self.checkpoint_path.replace(
 			"*epoch*", "{:04d}")
 
-	def find_last(self):
-		"""Finds the last checkpoint file of the last trained model in the
-		model directory.
-		Returns:
-			log_dir: The directory where events and weights are saved
-			checkpoint_path: the path to the last checkpoint file
-		"""
-		# Get directory names. Each directory corresponds to a model
-		dir_names = next(os.walk(self.model_dir))[1]
-		key = self.config.NAME.lower()
-		dir_names = filter(lambda f: f.startswith(key), dir_names)
-		dir_names = sorted(dir_names)
-		if not dir_names:
-			return None, None
-		# Pick last directory
-		dir_name = os.path.join(self.model_dir, dir_names[-1])
-		# Find the last checkpoint
-		checkpoints = next(os.walk(dir_name))[2]
-		checkpoints = filter(lambda f: f.startswith("mask_rcnn"), checkpoints)
-		checkpoints = sorted(checkpoints)
-		if not checkpoints:
-			return dir_name, None
-		checkpoint = os.path.join(dir_name, checkpoints[-1])
-		return dir_name, checkpoint
-
 	def load_weights(self, filepath):
 		"""Modified version of the correspoding Keras function with
 		the addition of multi-GPU support and the ability to exclude
@@ -1975,6 +1950,14 @@ class MaskRCNN(nn.Module):
 			step += 1
 
 		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
+
+	def evaluate_model(self, dataset, logs, nb_mc=10, mode='bbox'):
+		test_set = Dataset(dataset, self.config, augment=True)
+		test_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
+
+		analyzer = MRCNNAnalyzer(model, self.config, test_generator, logs_dir, nb_mc=2)
+		sigmoid_thresh=0.01
+		analyzer.cca('test_stats_thresh{}.csv'.format(sigmoid_thresh), sigmoid_thresh)
 
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected

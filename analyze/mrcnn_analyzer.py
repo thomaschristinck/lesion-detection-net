@@ -1,6 +1,6 @@
-import tensorflow as tf
 from timeit import default_timer as timer
 import csv
+import utils
 import numpy as np
 import nrrd
 import torch
@@ -17,10 +17,10 @@ Analyzer is essentially Tanya's Bunet Analyzer code modified to work with a pyto
 '''
 
 class MRCNNAnalyzer:
-    def __init__(self, model, config, dataset, out_dir, nb_mc):
+    def __init__(self, model, config, datagen, out_dir, nb_mc):
         self.__model = model
         self.__config = config
-        self.__dataset = dataset
+        self.__datagen = datagen
         self.__out_dir = out_dir
         self.__nb_mc = nb_mc
 
@@ -54,42 +54,33 @@ class MRCNNAnalyzer:
         start = timer()
         with open(join(self.__out_dir, out_file), 'w', newline='') as csvfile:
             stats_writer = csv.writer(csvfile, delimiter=',')
-            stats_writer.writerow(['subj', 'tp', 'mean_fdr', 'mean_tpr', 'mean_dice'])
+            stats_writer.writerow(['subj', 'tp', 'mean_fdr', 'mean_tpr', 'mean_dice', 'mean roi'])
             nb_subj = 0
+            total_mean_overlaps = 0
             ustats = {'fdr': 0, 'tpr': 0, 'dice': 0}
-            test_set = modellib.Dataset(self.__dataset, self.__config, augment=True)
-            data_gen = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=1)
-            print(data_gen)
-            for inputs in data_gen:
+    
+            for inputs in self._data_gen:
                 images = inputs[0]
-                rpn_match = inputs[1]
-                rpn_bbox = inputs[2]
-                gt_class_ids = inputs[3]
-                gt_boxes = inputs[4]
-                gt_masks = inputs[5]
-                image_metas = inputs[6]
 
-                # image_metas as numpy array
-                image_metas = image_metas.numpy()
-
+                # image as numpy array for mc samples
                 images = np.repeat(images, self.__nb_mc, 0)
 
                 # Wrap in variables
                 images = Variable(images)
-                rpn_match = Variable(rpn_match)
-                rpn_bbox = Variable(rpn_bbox)
-                gt_class_ids = Variable(gt_class_ids)
-                gt_boxes = Variable(gt_boxes)
-                gt_masks = Variable(gt_masks)
-
+        
                 # To GPU
                 if self.__config.GPU_COUNT:
                     images = images.cuda()
-                    rpn_match = rpn_match.cuda()
-                    rpn_bbox = rpn_bbox.cuda()
-                    gt_class_ids = gt_class_ids.cuda()
-                    gt_boxes = gt_boxes.cuda()
-                    gt_masks = gt_masks.cuda()
+
+                # Compute the IoUs between the two sets of boxes - in this case we use the maximum IoU for each set
+                overlaps = utils.compute_2D_overlaps(results['rois'], gt_boxes)
+                max_overlaps_idx = np.zeros(overlaps.shape[1])
+                max_overlaps = np.zeros(overlaps.shape[1])
+                for i in range(overlaps.shape[1]):
+                    max_overlaps_idx[i] = np.argmax(overlaps[:, i], axis=0) 
+                    max_overlaps[i] = overlaps[:,i][max_overlaps_idx]
+                mean_overlaps = np.mean(max_overlaps)
+                total_mean_overlaps += mean_overlaps
 
                 # Run detection
                 results = self.__model.detect([images])
@@ -105,9 +96,9 @@ class MRCNNAnalyzer:
                 ustats['dice'] += stats['dice']
                 nb_subj += 1
                 print('completed subject {}     {:.2f}m'.format(nb_subj, (timer() - start) / 60))
-                stats_writer.writerow([subj[0], tp[0], stats['fdr']['all'], stats['tpr']['all'], stats['dice']])
+                stats_writer.writerow([subj[0], tp[0], stats['fdr']['all'], stats['tpr']['all'], stats['dice'], mean_overlaps])
             stats_writer.writerow(
-                ['mean_subj', '_', ustats['fdr'] / nb_subj, ustats['tpr'] / nb_subj, ustats['dice'] / nb_subj])
+                ['mean_subj', '_', ustats['fdr'] / nb_subj, ustats['tpr'] / nb_subj, ustats['dice'] / nb_subj, total_mean_overlaps/nb_subj])
         print("completed in {:.2f}m".format((timer() - start) / 60))
 
     def roc(self, out_file, thresh_start, thresh_stop, thresh_step):
@@ -151,8 +142,7 @@ class MRCNNAnalyzer:
             thresh = np.arange(thresh_start, thresh_stop, thresh_step)
             ustats = {}
             [ustats.update({t: {'fdr': 0, 'tpr': 0, 'dice': 0}}) for t in thresh]
-            test_set = modellib.Dataset(self.__dataset, self.__config, augment=True)
-            data_gen = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
+    
             for inputs in data_gen:
                 images = inputs[0]
                 rpn_match = inputs[1]
