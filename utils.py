@@ -54,17 +54,11 @@ def remove_tiny_les(lesion_image, nvox=2):
 		nb_vox = np.sum(lesion_image[labels == i])
 		if nb_vox <= nvox:
 			lesion_image[labels == i] = 0
-
-		# Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
-		lesion_image[labels != i] = 0
-		lesion_image[labels == i] = 1
-		lesion_size = np.sum(lesion_image[labels == i])
-		if nb_vox > nvox:
+		
+		if nb_vox > 0:
+			# Classify as lesion. There is a bug here where if we set lesions less than two voxels big
+			# to the background class (nb_vox > nvox), then we crash
 			class_ids[i-1] = 1
-
-	# Reset ground truth mask
-	for i in range(1, nles + 1):
-		lesion_image[labels == i] = 1
 
 	class_ids = np.asarray(class_ids)
 
@@ -281,6 +275,7 @@ class Dataset(object):
 		labels = {}
 		nles = {}
 		labels, nles = ndimage.label(gt_mask)
+		print('num gt lesions :', nles)
 		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
 		# Check if there are no lesions
@@ -299,7 +294,7 @@ class Dataset(object):
 
 		gt_masks = gt_masks.transpose(1, 2, 0)
 
-		return net_mask, gt_masks, class_ids
+		return net_mask, gt_masks, class_ids, nles
 
 def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 	"""

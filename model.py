@@ -1114,15 +1114,42 @@ def compute_mrcnn_mask_loss(target_masks, target_class_ids, pred_masks):
 
 	return loss
 
-def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask):
+def compute_count_loss(target_count, pred_class_logits):
+	'''
+	target_count: integer, the ground truth lesion count.
+	pred_class_logits: [batch, num_rois, num_classes]
+	'''
+	print('Target number of lesions : ', target_count)
+	if pred_class_logits.size():
+		roi_idx = torch.nonzero(pred_class_logits[:,1] > 0.9)
+		pred_nles = Variable(torch.Tensor([len(roi_idx)]))
+		pred_nles = pred_nles.cuda()
+	else:
+		pred_nles = Variable(torch.Tensor([0]))
+
+	if target_count.size() or (not target_count.size() and pred_nles.size()):
+		# change 0.9 to the threshold used later
+		print('Predicted number of lesions: ', pred_nles)
+		pred_nles = pred_nles.cuda()
+
+		# Binary cross entropy
+		loss = F.binary_cross_entropy(target_count, pred_nles)
+	else:
+		loss = Variable(torch.FloatTensor([0]), requires_grad=False)
+		if target_class_ids.is_cuda:
+			loss = loss.cuda()
+
+	return loss
+
+def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_count):
 	
 	rpn_class_loss = compute_rpn_class_loss(rpn_match, rpn_class_logits)
 	rpn_bbox_loss = compute_rpn_bbox_loss(rpn_bbox, rpn_match, rpn_pred_bbox)
 	mrcnn_class_loss = compute_mrcnn_class_loss(target_class_ids, mrcnn_class_logits)
 	mrcnn_bbox_loss = compute_mrcnn_bbox_loss(target_deltas, target_class_ids, mrcnn_bbox)
 	mrcnn_mask_loss = compute_mrcnn_mask_loss(target_mask, target_class_ids, mrcnn_mask)
-
-	return [rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss]
+	count_loss = compute_count_loss(target_count, mrcnn_class_logits)
+	return [rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss, count_loss]
 
 
 ############################################################
@@ -1153,7 +1180,10 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# Load t2 image, uncertainties, and mask
 	t2_image = dataset.load_t2_image(image_id, dataset, config)
 	uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
-	net_mask, gt_mask, class_ids = dataset.load_masks(image_id, dataset, config)
+	net_mask, gt_mask, class_ids, nles = dataset.load_masks(image_id, dataset, config)
+
+	nles = np.asarray([nles])
+	nles = nles.astype(np.int16)
 
 	# Now combine image data into a 192 * 192 * 3 image 
 	image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
@@ -1186,7 +1216,7 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# gt_mask = utils.minimize_mask(bbox, gt_mask, config.MINI_MASK_SHAPE, dims)
 	image_meta = compose_image_meta(image_id, shape, window)
 
-	return image, class_ids, bbox, gt_mask, image_meta
+	return image, class_ids, bbox, gt_mask, image_meta, nles
 
 def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 	"""Given the anchors and GT boxes, compute overlaps and identify positive
@@ -1337,7 +1367,7 @@ class Dataset(torch.utils.data.Dataset):
 
 		# Get GT bounding boxes and masks for image.
 		image_id = self._image_ids[image_index]
-		image, gt_class_ids, gt_boxes, gt_masks, image_metas = \
+		image, gt_class_ids, gt_boxes, gt_masks, image_metas, nles = \
 			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
 						  use_mini_mask=self._config.USE_MINI_MASK)
 
@@ -1366,7 +1396,6 @@ class Dataset(torch.utils.data.Dataset):
 		# Convert
 		if self._config.BRAIN_DIMENSIONS == 2:
 			image = image.transpose(2, 0, 1)
-		
 		image = torch.from_numpy(image).float()
 		rpn_match = torch.from_numpy(rpn_match)
 		rpn_bbox = torch.from_numpy(rpn_bbox).float()
@@ -1374,9 +1403,10 @@ class Dataset(torch.utils.data.Dataset):
 		gt_boxes = torch.from_numpy(gt_boxes).float()
 		gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2,0,1)).float()
 		image_metas = torch.from_numpy(image_metas)
-
+		nles = torch.Tensor(nles)
+		print('Type in start', nles)
 		#Return all images
-		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas
+		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas, nles
 
 	def __len__(self):
 		return self._image_ids.shape[0]
@@ -1750,8 +1780,8 @@ class MaskRCNN(nn.Module):
 		train_set = Dataset(train_dataset, self.config, augment=True)
 		val_set = Dataset(val_dataset, self.config, augment=True)
 
-		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
-		val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=4)
+		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=1)
+		val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=1)
 
 		# Train
 		log("\nStarting at epoch {}. LR={}\n".format(self.epoch+1, learning_rate))
@@ -1814,6 +1844,9 @@ class MaskRCNN(nn.Module):
 			gt_boxes = inputs[4]
 			gt_masks = inputs[5]
 			image_metas = inputs[6]
+			nles = inputs[7]
+
+
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
@@ -1825,6 +1858,7 @@ class MaskRCNN(nn.Module):
 			gt_class_ids = Variable(gt_class_ids)
 			gt_boxes = Variable(gt_boxes)
 			gt_masks = Variable(gt_masks)
+			gt_count = Variable(nles)
 
 			# To GPU
 			if self.config.GPU_COUNT:
@@ -1834,14 +1868,15 @@ class MaskRCNN(nn.Module):
 				gt_class_ids = gt_class_ids.cuda()
 				gt_boxes = gt_boxes.cuda()
 				gt_masks = gt_masks.cuda()
+				gt_count = gt_count.cuda()
 
 			# Run object detection
 			rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \
 				self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='training')
 
 			# Compute losses
-			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask)
-			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss
+			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss, count_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, gt_count)
+			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss + count_loss
 
 			# Backpropagation
 			loss.backward()
@@ -1897,6 +1932,7 @@ class MaskRCNN(nn.Module):
 			gt_boxes = inputs[4]
 			gt_masks = inputs[5]
 			image_metas = inputs[6]
+			target_count = inputs[7]
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
@@ -1908,6 +1944,8 @@ class MaskRCNN(nn.Module):
 			gt_class_ids = Variable(gt_class_ids, volatile=True)
 			gt_boxes = Variable(gt_boxes, volatile=True)
 			gt_masks = Variable(gt_masks, volatile=True)
+			target_count = Variable(target_count, volatile=True)
+
 
 			# To GPU
 			if self.config.GPU_COUNT:
@@ -1917,6 +1955,7 @@ class MaskRCNN(nn.Module):
 				gt_class_ids = gt_class_ids.cuda()
 				gt_boxes = gt_boxes.cuda()
 				gt_masks = gt_masks.cuda()
+				target_count = target_count.cuda()
 
 			# Run object detection
 			rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \
@@ -1926,7 +1965,7 @@ class MaskRCNN(nn.Module):
 				continue
 
 			# Compute losses
-			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask)
+			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_count)
 			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss
 
 			# Progress
