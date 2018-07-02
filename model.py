@@ -1119,7 +1119,6 @@ def compute_count_loss(target_count, pred_class_logits):
 	target_count: integer, the ground truth lesion count.
 	pred_class_logits: [batch, num_rois, num_classes]
 	'''
-	print('Target number of lesions : ', target_count)
 	if pred_class_logits.size():
 		roi_idx = torch.nonzero(pred_class_logits[:,1] > 0.9)
 		pred_nles = Variable(torch.Tensor([len(roi_idx)]))
@@ -1129,11 +1128,10 @@ def compute_count_loss(target_count, pred_class_logits):
 
 	if target_count.size() or (not target_count.size() and pred_nles.size()):
 		# change 0.9 to the threshold used later
-		print('Predicted number of lesions: ', pred_nles)
 		pred_nles = pred_nles.cuda()
 
 		# Binary cross entropy
-		loss = F.binary_cross_entropy(target_count, pred_nles)
+		loss = F.smooth_l1_loss(pred_nles, target_count)
 	else:
 		loss = Variable(torch.FloatTensor([0]), requires_grad=False)
 		if target_class_ids.is_cuda:
@@ -1404,7 +1402,7 @@ class Dataset(torch.utils.data.Dataset):
 		gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2,0,1)).float()
 		image_metas = torch.from_numpy(image_metas)
 		nles = torch.Tensor(nles)
-		print('Type in start', nles)
+		
 		#Return all images
 		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas, nles
 
@@ -1802,14 +1800,14 @@ class MaskRCNN(nn.Module):
 			log("Epoch {}/{}.".format(epoch,epochs))
 
 			# Training
-			loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask = self.train_epoch(train_generator, optimizer, self.config.STEPS_PER_EPOCH)
+			loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask, loss_count = self.train_epoch(train_generator, optimizer, self.config.STEPS_PER_EPOCH)
 
 			# Validation
-			val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask = self.valid_epoch(val_generator, self.config.VALIDATION_STEPS)
+			val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask, val_loss_count = self.valid_epoch(val_generator, self.config.VALIDATION_STEPS)
 
 			# Statistics
-			self.loss_history.append([loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask])
-			self.val_loss_history.append([val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask])
+			self.loss_history.append([loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask, count_loss])
+			self.val_loss_history.append([val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask, val_loss_count])
 			visualize.plot_loss(self.loss_history, self.val_loss_history, save=True, log_dir=self.log_dir)
 			#TODO:
 			#visualize.plot_roc
@@ -1829,6 +1827,7 @@ class MaskRCNN(nn.Module):
 		loss_mrcnn_class_sum = 0
 		loss_mrcnn_bbox_sum = 0
 		loss_mrcnn_mask_sum = 0
+		loss_count_sum = 0
 		step = 0
 
 		optimizer.zero_grad()
@@ -1844,9 +1843,7 @@ class MaskRCNN(nn.Module):
 			gt_boxes = inputs[4]
 			gt_masks = inputs[5]
 			image_metas = inputs[6]
-			nles = inputs[7]
-
-
+			nles = inputs[7][0]
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
@@ -1893,7 +1890,7 @@ class MaskRCNN(nn.Module):
 							 suffix="Complete - loss: {:.5f} - rpn_class_loss: {:.5f} - rpn_bbox_loss: {:.5f} - mrcnn_class_loss: {:.5f} - mrcnn_bbox_loss: {:.5f} - mrcnn_mask_loss: {:.5f}".format(
 								 loss.data.cpu()[0], rpn_class_loss.data.cpu()[0], rpn_bbox_loss.data.cpu()[0],
 								 mrcnn_class_loss.data.cpu()[0], mrcnn_bbox_loss.data.cpu()[0],
-								 mrcnn_mask_loss.data.cpu()[0]), length=10)
+								 mrcnn_mask_loss.data.cpu()[0], count_loss.data.cpu()[0]), length=10)
 				print('completed {} steps in {:.2f}m'.format(step + 1, (timer() - start) / 60))
 
 			#
@@ -1906,13 +1903,14 @@ class MaskRCNN(nn.Module):
 			loss_mrcnn_class_sum += mrcnn_class_loss.data.cpu()[0]/steps
 			loss_mrcnn_bbox_sum += mrcnn_bbox_loss.data.cpu()[0]/steps
 			loss_mrcnn_mask_sum += mrcnn_mask_loss.data.cpu()[0]/steps
+			loss_count_sum += count_loss.data.cpu()[0]/steps
 
 			# Break after 'steps' steps
 			if step==steps-1:
 				break
 			step += 1
 
-		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
+		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum, loss_count_sum
 
 	def valid_epoch(self, datagenerator, steps):
 
@@ -1923,6 +1921,7 @@ class MaskRCNN(nn.Module):
 		loss_mrcnn_class_sum = 0
 		loss_mrcnn_bbox_sum = 0
 		loss_mrcnn_mask_sum = 0
+		loss_count_sum = 0
 
 		for inputs in datagenerator:
 			images = inputs[0]
@@ -1932,7 +1931,7 @@ class MaskRCNN(nn.Module):
 			gt_boxes = inputs[4]
 			gt_masks = inputs[5]
 			image_metas = inputs[6]
-			target_count = inputs[7]
+			target_count = inputs[7][0]
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
@@ -1965,15 +1964,15 @@ class MaskRCNN(nn.Module):
 				continue
 
 			# Compute losses
-			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_count)
-			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss
+			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss, count_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_count)
+			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss + count_loss
 
 			# Progress
 			printProgressBar(step + 1, steps, prefix="\n{}/{}".format(step + 1, steps),
 							 suffix="Complete - loss: {:.5f} - rpn_class_loss: {:.5f} - rpn_bbox_loss: {:.5f} - mrcnn_class_loss: {:.5f} - mrcnn_bbox_loss: {:.5f} - mrcnn_mask_loss: {:.5f}".format(
 								 loss.data.cpu()[0], rpn_class_loss.data.cpu()[0], rpn_bbox_loss.data.cpu()[0],
 								 mrcnn_class_loss.data.cpu()[0], mrcnn_bbox_loss.data.cpu()[0],
-								 mrcnn_mask_loss.data.cpu()[0]), length=10)
+								 mrcnn_mask_loss.data.cpu()[0], count_loss.data.cpu()[0]), length=10)
 
 			# Statistics
 			loss_sum += loss.data.cpu()[0]/steps
@@ -1982,13 +1981,14 @@ class MaskRCNN(nn.Module):
 			loss_mrcnn_class_sum += mrcnn_class_loss.data.cpu()[0]/steps
 			loss_mrcnn_bbox_sum += mrcnn_bbox_loss.data.cpu()[0]/steps
 			loss_mrcnn_mask_sum += mrcnn_mask_loss.data.cpu()[0]/steps
+			loss_count_sum += count_loss.data.cpu()[0]/steps
 
 			# Break after 'steps' steps
 			if step==steps-1:
 				break
 			step += 1
 
-		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
+		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum, loss_count
 
 	def evaluate_model(self, dataset, logs, nb_mc=10, mode='bbox'):
 		test_set = Dataset(dataset, self.config, augment=True)

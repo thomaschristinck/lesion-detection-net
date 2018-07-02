@@ -275,7 +275,6 @@ class Dataset(object):
 		labels = {}
 		nles = {}
 		labels, nles = ndimage.label(gt_mask)
-		print('num gt lesions :', nles)
 		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
 		# Check if there are no lesions
