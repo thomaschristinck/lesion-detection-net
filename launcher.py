@@ -96,6 +96,7 @@ class MSDataset(utils.Dataset):
 		fold_length = len(self._image_ids) // self._nb_folds
 		mod_number = len(config.get('mods'))
 		train_idx = (((self._nb_folds - 2) * fold_length) // mod_number) * mod_number
+		train_idx = (((self._nb_folds - 2) * fold_length) // mod_number) * mod_number
 		valid_idx = (((self._nb_folds - 1) * fold_length) // mod_number) * mod_number
 		
 		if self._mode == 'train':
