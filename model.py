@@ -497,7 +497,7 @@ def pyramid_roi_align(inputs, pool_size, image_shape):
 	# Rearrange pooled features to match the order of the original boxes
 	_, box_to_level = torch.sort(box_to_level)
 	pooled = pooled[box_to_level, :, :]
-	
+
 	return pooled
 
 
@@ -583,7 +583,6 @@ def detection_target_layer(proposals, gt_class_ids, gt_boxes, gt_masks, config):
 	# Positive ROIs
 	if torch.nonzero(positive_roi_bool).size():
 		positive_indices = torch.nonzero(positive_roi_bool)[:, 0]
-
 		positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
 							 config.ROI_POSITIVE_RATIO)
 		rand_idx = torch.randperm(positive_indices.size()[0])

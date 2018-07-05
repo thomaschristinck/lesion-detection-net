@@ -10,7 +10,8 @@ This is a pytorch implementation of Mask R-CNN that is largely based on multimod
 4. Make sure you're using pytorch0.3 (install with pip by ```pip install http://download.pytorch.org/whl/cu80/torch-0.3.1-cp35-cp35m-linux_x86_64.whl```). Later I'll hopefully upgrade everything to 0.4.
 5. ```pip install -r requirements.txt```
 6.  We use two repositories (non-maximum suppression from ruotianluo's [pytorch-faster-rcnn](https://github.com/ruotianluo/pytorch-faster-rcnn) and longcw's [RoiAlign](https://github.com/longcw/RoIAlign.pytorch)) that need to be built with the right --arch option for cuda support.
-	| GPU | arch |
+
+    | GPU | arch |
     | --- | --- |
     | TitanX | sm_52 |
     | Tesla K40C | sm_30 |
@@ -30,7 +31,7 @@ This is a pytorch implementation of Mask R-CNN that is largely based on multimod
         cd ../../
 
 
-Usage is:
+Training usage is:
 ```python launcher.py train --dataset=data_path ---model=imagenet```
 
 

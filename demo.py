@@ -26,14 +26,6 @@ ROOT_DIR = os.getcwd()
 # Directory to save logs and trained model
 MODEL_DIR = os.path.join(ROOT_DIR, "logs")
 
-# Path to trained weights file
-# Download this file and place in the root of your
-# project (See README file for details)
-MODEL_PATH = os.path.join(ROOT_DIR, "mask_rcnn_lesion_mask_rcnn_0015.pth")
-
-# Directory of images to run detection on
-IMAGE_DIR = os.path.join(ROOT_DIR, "images")
-
 class InferenceConfig(launcher.DataConfig):
     # Set batch size to 1 since we'll be running inference on
     # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
@@ -43,6 +35,14 @@ class InferenceConfig(launcher.DataConfig):
 
 config = InferenceConfig()
 config.display()
+
+# Path to trained weights file
+# Download this file and place in the root of your
+# project (See README file for details)
+MODEL_PATH = config.CONTINUE_MODEL_PATH
+
+# Directory of images to run detection on
+IMAGE_DIR = os.path.join(ROOT_DIR, "images")
 
 # Create model object.
 model = modellib.MaskRCNN(model_dir=MODEL_DIR, config=config)
