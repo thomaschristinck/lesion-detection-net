@@ -59,7 +59,7 @@ class_names = ['BG', 'lesion']
 
 # Load a random image from the images folder
 file_names = sorted(os.listdir(IMAGE_DIR))
-index = random.randint(0,11)
+index = random.randint(0,12)
 slice_index = random.randint(20, 35)
 
 netseg_idx = (index // 4) * 4 
@@ -83,24 +83,11 @@ t2 = np.asarray(t2)
 target = np.asarray(target)
 unc = np.asarray(unc)
 
-'''
-boxes = utils.extract_bboxes(target[:,:,slice_index], dims=2, buf=2)
-labels = {}
-nles = {}
-labels, nles = ndimage.label(target[:,:,slice_index])
-
-for les in range(nles):
-	img = visualize.draw_box(target[:,:,slice_index], boxes[les, 0:4], color=0.2)
-if nles == 0:
-	img = t2[:,:,slice_index]
-imgplt = plt.imshow(img)
-plt.show()
-'''
+# Stack slices to make the input image
 image = np.stack([t2, unc, netseg], axis = 0)
 
 # Run detection
 results = model.detect([image])
-
 image = image.transpose(1,2,0)
 
 # Visualize results
@@ -108,8 +95,8 @@ r = results[0]
 
 # Visualize bounding boxes with target lesions
 print('Plotting stuff.....')
-visualize.display_instances(image, target, r['rois'], r['masks'], r['class_ids'], class_names, r['scores'])
-
+visualize.build_image(image, target, r['rois'], r['masks'], netseg, r['class_ids'], class_names, r['scores'])
+'''
 # View the 'ground truth' segmentation
 plt.figure(1)
 plt.imshow(target, cmap=plt.cm.magma)
@@ -142,3 +129,4 @@ plt.savefig('unc.png')
 plt.show()
 
 print('Done plotting stuff')
+'''

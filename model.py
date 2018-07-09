@@ -1315,6 +1315,7 @@ def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 		ix += 1
 
 	return rpn_match, rpn_bbox
+
 class Dataset(torch.utils.data.Dataset):
 	def __init__(self, dataset, config, augment=True):
 		"""A generator that returns images and corresponding target class ids,
@@ -1361,6 +1362,8 @@ class Dataset(torch.utils.data.Dataset):
 												 config.BACKBONE_SHAPES,
 												 config.BACKBONE_STRIDES,
 												 config.RPN_ANCHOR_STRIDE)
+
+		print('Self\'s anchors', self._anchors.shape)
 
 	def __getitem__(self, image_index):
 
@@ -1654,7 +1657,7 @@ class MaskRCNN(nn.Module):
 		outputs = list(zip(*layer_outputs))
 		outputs = [torch.cat(list(o), dim=1) for o in outputs]
 		rpn_class_logits, rpn_class, rpn_bbox = outputs
-		
+
 		# Generate proposals
 		# Proposals are [batch, N, (y1, x1, y2, x2)] in normalized coordinates
 		# and zero padded.

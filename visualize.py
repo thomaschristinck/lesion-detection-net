@@ -131,24 +131,84 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
                 color='tab:gray', size=6, backgroundcolor="none")
 
         # Mask
-        #mask = masks[:, :, i]
-        #masked_image = apply_mask(masked_image, mask, color)
-        #masked_image = apply_mask(masked_image, target, color)
+        mask = masks[:, :, i]
+        masked_image = apply_mask(masked_image, mask, color)
+        masked_image = apply_mask(masked_image, target, color)
 
         # Mask Polygon
         # Pad to ensure proper polygons for masks that touch image edges.
-        #padded_mask = np.zeros(
-        #    (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
-        #padded_mask[1:-1, 1:-1] = mask
-        #contours = find_contours(padded_mask, 0.5)
-        #for verts in contours:
+        padded_mask = np.zeros(
+            (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
+        padded_mask[1:-1, 1:-1] = mask
+        contours = find_contours(padded_mask, 0.5)
+        for verts in contours:
             # Subtract the padding and flip (y, x) to (x, y)
-            #verts = np.fliplr(verts) - 1
-            #p = Polygon(verts, facecolor="none", edgecolor=color)
-            #ax.add_patch(p)
+            verts = np.fliplr(verts) - 1
+            p = Polygon(verts, facecolor="none", edgecolor=color)
+            ax.add_patch(p)
 
     ax.imshow(masked_image, cmap=plt.cm.pink)
-    #ax[0,1].imshow(target.astype(np.uint8))
+
+def build_image(image, target, boxes, masks, bunet_mask, class_ids, class_names,
+                      scores=None, title="",
+                      figsize=(16, 16), ax=None):
+    """
+    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
+    masks: [height, width, num_instances]
+    class_ids: [num_instances]
+    class_names: list of class names of the dataset
+    scores: (optional) confidence scores for each box
+    figsize: (optional) the size of the image.
+    """
+    # Number of instances
+    N = boxes.shape[0]
+    if not N:
+        print("\n*** No instances to display *** \n")
+    else:
+        assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
+
+    if not ax:
+        fig, ax = plt.subplots(1, 3, figsize=figsize)
+
+    # Generate random colors
+    colors = random_colors(N)
+
+    # Show area outside image boundaries.
+    height, width = image.shape[:2]
+
+    for i in range(3):
+        ax[i].axis('off')
+
+    masked_image = image[:,:,0].copy() #astype(np.uint32)
+    print(masked_image, np.max(masked_image))
+    for i in range(N):
+        color = colors[i]
+
+        # Bounding box
+        if not np.any(boxes[i]):
+            # Skip this instance. Has no bbox. Likely lost in image cropping.
+            continue
+        y1, x1, y2, x2 = boxes[i]
+        p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+                              alpha=0.7, linestyle="dashed",
+                              edgecolor=color, facecolor='none')
+        ax[0].add_patch(p)
+
+        # Label
+        class_id = class_ids[i]
+        score = scores[i] if scores is not None else None
+        label = class_names[class_id]
+        x = random.randint(x1, (x1 + x2) // 2)
+        caption = "{:.3f}".format(score)
+        ax[0].text(x1, y1 + 8, caption,
+                color='tab:gray', size=6, backgroundcolor="none")
+
+        masked_image = masked_image
+        ax[0].imshow(masked_image, cmap=plt.cm.pink)
+        ax[1].imshow(target, cmap=plt.cm.pink)
+        ax[2].imshow(bunet_mask, cmap=plt.cm.pink)
+
+    plt.show()
 
 
 def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):

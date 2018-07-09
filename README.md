@@ -11,12 +11,15 @@ This is a pytorch implementation of Mask R-CNN that is largely based on multimod
 5. ```pip install -r requirements.txt```
 6.  We use two repositories (non-maximum suppression from ruotianluo's [pytorch-faster-rcnn](https://github.com/ruotianluo/pytorch-faster-rcnn) and longcw's [RoiAlign](https://github.com/longcw/RoIAlign.pytorch)) that need to be built with the right --arch option for cuda support.
 
-    | GPU | arch |
-    | --- | --- |
-    | TitanX | sm_52 |
-    | Tesla K40C | sm_30 |
-    | GTX 1070 | sm_61 |
-    | GTX 1080 (Ti) | sm_61 |
+
+| GPU | arch |
+| --- | --- |
+| TitanX | sm_52 |
+| Tesla K40C | sm_30 |
+| GTX 1070 | sm_61 |
+| GTX 1080 (Ti) | sm_61 |
+
+```
 
         cd nms/src/cuda/
         nvcc -c -o nms_kernel.cu.o nms_kernel.cu -x cu -Xcompiler -fPIC -arch=[arch]
@@ -24,12 +27,17 @@ This is a pytorch implementation of Mask R-CNN that is largely based on multimod
         python build.py
         cd ../
 
+```
+
+```
+
         cd roialign/roi_align/src/cuda/
         nvcc -c -o crop_and_resize_kernel.cu.o crop_and_resize_kernel.cu -x cu -Xcompiler -fPIC -arch=[arch]
         cd ../../
         python build.py
         cd ../../
 
+```
 
 Training usage is:
 ```python launcher.py train --dataset=data_path ---model=imagenet```

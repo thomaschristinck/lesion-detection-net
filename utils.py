@@ -226,7 +226,7 @@ class Dataset(object):
 
 		# Get indices
 		nb_mods = len(config.MODALITIES)
-		t2_idx = int((image_id // nb_mods) * nb_mods + 1)
+		t2_idx = int((image_id // nb_mods) * nb_mods + 2)
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
 		t2, opts = nrrd.read(t2_file)
@@ -240,11 +240,10 @@ class Dataset(object):
 		# Get indices
 		nb_mods = len(config.MODALITIES)
 
-		# Offset is 3 for entropy, 4 for MC variance, 5 for mutual information, 6 for predictive prog
-		uncmcvar_idx = int((image_id // nb_mods) * nb_mods + 4)
-	
-
+		# Offset is 4 for entropy, 5 for MC variance, 6 for mutual information, 7 for predictive prog
+		uncmcvar_idx = int((image_id // nb_mods) * nb_mods + 5)
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
+
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
 		uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
 		return uncmcvar
@@ -254,14 +253,12 @@ class Dataset(object):
 		"""
 		# Get indices
 		nb_mods = len(config.MODALITIES)
-		net_mask_idx = int((image_id // nb_mods) * nb_mods)
-		gt_mask_idx = int((image_id // nb_mods) * nb_mods + 2)
-	   
+		net_mask_idx = int((image_id // nb_mods) * nb_mods + 1)
+		gt_mask_idx = int((image_id // nb_mods) * nb_mods + 3)
 		net_mask_file = join(dataset._dir, dataset._image_list[net_mask_idx])
 		gt_mask_file = join(dataset._dir, dataset._image_list[gt_mask_idx])
 		net_mask, opts = nrrd.read(net_mask_file)
 		gt_mask, opts = nrrd.read(gt_mask_file)
-
 		gt_mask = np.asarray(gt_mask)
 		net_mask = np.asarray(net_mask)
 		
@@ -481,6 +478,7 @@ def generate_anchors(scales, ratios, shape, feature_stride, anchor_stride):
 	# Convert to corner coordinates (y1, x1, y2, x2)
 	boxes = np.concatenate([box_centers - 0.5 * box_sizes,
 							box_centers + 0.5 * box_sizes], axis=1)
+
 	return boxes
 
 

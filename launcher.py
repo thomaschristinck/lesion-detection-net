@@ -96,7 +96,6 @@ class MSDataset(utils.Dataset):
 		fold_length = len(self._image_ids) // self._nb_folds
 		mod_number = len(config.get('mods'))
 		train_idx = (((self._nb_folds - 2) * fold_length) // mod_number) * mod_number
-		train_idx = (((self._nb_folds - 2) * fold_length) // mod_number) * mod_number
 		valid_idx = (((self._nb_folds - 1) * fold_length) // mod_number) * mod_number
 		
 		if self._mode == 'train':
@@ -323,7 +322,7 @@ if __name__ == '__main__':
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE,
-					epochs=10,
+					epochs=30,
 					layers='heads')
 
 		# Training - Stage 3
@@ -331,7 +330,7 @@ if __name__ == '__main__':
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE, #Changed from /10
-					epochs=15,
+					epochs=60,
 					layers='all')
 
 	elif args.command == "evaluate":
