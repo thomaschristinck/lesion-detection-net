@@ -322,15 +322,15 @@ if __name__ == '__main__':
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE,
-					epochs=30,
+					epochs=10,
 					layers='heads')
 
 		# Training - Stage 3
 		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE, #Changed from /10
-					epochs=60,
+					learning_rate=config.LEARNING_RATE / 2 , #Changed from /10
+					epochs=20,
 					layers='all')
 
 	elif args.command == "evaluate":

@@ -1396,8 +1396,7 @@ class Dataset(torch.utils.data.Dataset):
 		image = mold_image(image.astype(np.float32), self._config)
 
 		# Convert
-		if self._config.BRAIN_DIMENSIONS == 2:
-			image = image.transpose(2, 0, 1)
+		image = image.transpose(2, 0, 1)
 		image = torch.from_numpy(image).float()
 		rpn_match = torch.from_numpy(rpn_match)
 		rpn_bbox = torch.from_numpy(rpn_bbox).float()
@@ -1405,10 +1404,10 @@ class Dataset(torch.utils.data.Dataset):
 		gt_boxes = torch.from_numpy(gt_boxes).float()
 		gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2,0,1)).float()
 		image_metas = torch.from_numpy(image_metas)
-		nles = torch.Tensor(nles)
+		#nles = torch.Tensor(nles)
 		
 		#Return all images
-		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas, nles
+		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas
 
 	def __len__(self):
 		return self._image_ids.shape[0]
@@ -1847,7 +1846,7 @@ class MaskRCNN(nn.Module):
 			gt_boxes = inputs[4]
 			gt_masks = inputs[5]
 			image_metas = inputs[6]
-			nles = inputs[7][0]
+			#nles = inputs[7][0]
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
@@ -1859,7 +1858,7 @@ class MaskRCNN(nn.Module):
 			gt_class_ids = Variable(gt_class_ids)
 			gt_boxes = Variable(gt_boxes)
 			gt_masks = Variable(gt_masks)
-			gt_count = Variable(nles)
+			#gt_count = Variable(nles)
 
 			# To GPU
 			if self.config.GPU_COUNT:
@@ -1869,7 +1868,7 @@ class MaskRCNN(nn.Module):
 				gt_class_ids = gt_class_ids.cuda()
 				gt_boxes = gt_boxes.cuda()
 				gt_masks = gt_masks.cuda()
-				gt_count = gt_count.cuda()
+				#gt_count = gt_count.cuda()
 
 			# Run object detection
 			rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \

@@ -8,6 +8,7 @@ import scipy.misc
 import skimage.color
 import skimage.io
 import skimage
+from skimage import transform
 import torch
 import visualize
 import nrrd
@@ -328,7 +329,7 @@ def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 			scale = max_dim / image_max
 	# Resize image and mask
 	if scale != 1:
-		image = skimage.transform.resize(
+		image = transform.resize(
 			image, (round(h * scale), round(w * scale)))
 
 	image = image.transpose(1,2,0)

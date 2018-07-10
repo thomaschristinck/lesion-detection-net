@@ -50,6 +50,17 @@ class MRCNNAnalyzer:
         x[a >= thresh] = 0
         return x
 
+
+    def get_lesion_bin(nvox):
+        if 4 <= nvox <= 16:
+            return 'small'
+        elif 16 <= nvox <= 36:
+            return 'med'
+        elif nvox >= 36:
+            return 'large'
+        else:
+            return "small"
+
     def cca(self, out_file, thresh):
         start = timer()
         with open(join(self.__out_dir, out_file), 'w', newline='') as csvfile:
@@ -110,12 +121,15 @@ class MRCNNAnalyzer:
             thresh = np.arange(thresh_start, thresh_stop, thresh_step)
             ustats = {}
             [ustats.update({t: {'fdr': 0, 'tpr': 0, 'dice': 0}}) for t in thresh]
-            test_set = modellib.Dataset(self.__dataset, self.__config, augment=True)
-            data_gen = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
-            for subj, tp, x, y in data_gen:
-                x_mc = np.repeat(x, self.__nb_mc, 0)
-                mu_mcs = sess.run(self.__model.predictor,
-                                      feed_dict={self.__model.x: x_mc, self.__model.keep_prob: 0.5})
+            for inputs in self.__datagen:
+                image = inputs[0]
+                #x_mc = np.repeat(image, self.__nb_mc, 0)
+                print('Image shape ', image.shape)
+                image = image[0].transpose(1,2,0)
+                results = self.__model.detect([image])
+                r = results[0]
+                #mu_mcs = sess.run(self.__model.predictor,
+                #                      feed_dict={self.__model.x: x_mc, self.__model.keep_prob: 0.5})
                 mu_mcs = np.asarray(mu_mcs, np.float32)[..., 0]
                 ent = entropy(sigmoid(mu_mcs))
                 h = sigmoid(np.mean(mu_mcs, 0))
@@ -253,7 +267,7 @@ class MRCNNAnalyzer:
                 print('completed subject {}     {:.2f}m'.format(nb_subj, (timer() - start) / 60))
         print("completed in {:.2f}m".format((timer() - start) / 60))
 
-    def cca_img_no_unc(h, t, th):
+    def cca_img(h, t, th):
         """
         Connected component analysis of between prediction `h` and ground truth `t` across lesion bin sizes.
         :param h: network output on range [0,1], shape=(NxMxO)
@@ -264,30 +278,25 @@ class MRCNNAnalyzer:
         :type th: float16, float32, float64
         :return: dict
         """
-        h[h >= th] = 1
-        h[h < th] = 0
-        h = h.astype(np.int16)
-
-        t = remove_tiny_les(t, nvox=2)
-        h = ndimage.binary_dilation(h, structure=ndimage.generate_binary_structure(3, 2))
-
-        labels = {}
-        nles = {}
-        labels['h'], nles['h'] = ndimage.label(h)
-        labels['t'], nles['t'] = ndimage.label(t)
+        
+        nles = t.shape[0]
+        nbox = h.shape[0]
         found_h = np.ones(nles['h'], np.int16)
         ntp = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
         nfp = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
         nfn = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
         nb_les = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
-        nles_gt = {'all': nles['t'], 'small': 0, 'med': 0, 'large': 0}
-        for i in range(1, nles['t'] + 1):
-            lesion_size = np.sum(t[labels['t'] == i])
+        nles_gt = {'all': nles, 'small': 0, 'med': 0, 'large': 0}
+        for i in range(1, nles + 1):
+            y1, x1, y2, x2 = t[i]
+            print('Checking box coordinates ; ', x1, y1, x2, y2)
+            lesion_size = (x2 - x1) * (y2 - y1)
             nles_gt[get_lesion_bin(lesion_size)] += 1
             # list of detected lesions in this area
-            h_lesions = np.unique(labels['h'][labels['t'] == i])
-            # all the voxels in this area contribute to detecting the lesion
-            nb_overlap = h[labels['t'] == i].sum()
+            for box in range(1, nbox.shape[0] + 1):
+                # all the voxels in this area contribute to detecting the lesion
+                nb_overlap = model.bbox_overlaps(boxes1, boxes2)
+                print('Overlap matrix : ', nb_overlap)
             nb_les[get_lesion_bin(lesion_size)] += 1
             if nb_overlap >= 3 or nb_overlap >= 0.5 * lesion_size:
                 ntp[get_lesion_bin(lesion_size)] += 1

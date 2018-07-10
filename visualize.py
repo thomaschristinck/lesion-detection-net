@@ -180,7 +180,6 @@ def build_image(image, target, boxes, masks, bunet_mask, class_ids, class_names,
         ax[i].axis('off')
 
     masked_image = image[:,:,0].copy() #astype(np.uint32)
-    print(masked_image, np.max(masked_image))
     for i in range(N):
         color = colors[i]
 
@@ -209,7 +208,6 @@ def build_image(image, target, boxes, masks, bunet_mask, class_ids, class_names,
         ax[2].imshow(bunet_mask, cmap=plt.cm.pink)
 
     plt.show()
-
 
 def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):
     """
@@ -552,4 +550,32 @@ def plot_loss(loss, val_loss, save=True, log_dir=None):
         plt.show(block=False)
         plt.pause(0.1)
 
+class IndexTracker(object):
+    def __init__(self, ax, X):
+        self.ax = ax
+        self.ax.axis('off')
+        self.X = X
+        rows, cols, self.slices = X.shape
+        self.ind = self.slices//2
+        self.im = ax.imshow(self.X[:,:, self.ind], cmap=plt.cm.pink)
+        self.update()
+
+    def onscroll(self, event):
+        #print("%s %s" % (event.button, event.step))
+        if event.button == 'up':
+            self.ind = (self.ind + 1) % self.slices
+        else:
+            self.ind = (self.ind - 1) % self.slices
+        self.update()
+
+    def update(self):
+        self.im.set_data(self.X[:,:,self.ind])
+        self.ax.set_ylabel('slice %s' % self.ind)
+        self.im.axes.figure.canvas.draw()
+
+def scroll_display(image):
+    fig, ax = plt.subplots(1,1)
+    tracker = IndexTracker(ax, image)
+    fig.canvas.mpl_connect('scroll_event', tracker.onscroll)
+    plt.show()
 

@@ -175,7 +175,7 @@ def cca_img(h, t, u, uth, metric):
     return {'ntp': ntp, 'nfp': nfp, 'nfn': nfn, 'fdr': fdr, 'tpr': tpr, 'nles': nb_les, 'nles_gt': nles_gt}
 
 
-def cca_img_no_unc(h, t, th):
+def cca_img_no_unc(bbox, t, th):
     """
     Connected component analysis of between prediction `h` and ground truth `t` across lesion bin sizes.
     :param h: network output on range [0,1], shape=(NxMxO)
