@@ -321,7 +321,7 @@ if __name__ == '__main__':
 		# Training - Stage 1
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE,
+					learning_rate=config.LEARNING_RATE / 3,
 					epochs=10,
 					layers='heads')
 
@@ -329,7 +329,7 @@ if __name__ == '__main__':
 		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 2 , #Changed from /10
+					learning_rate=config.LEARNING_RATE / 3 , #Changed from /10
 					epochs=20,
 					layers='all')
 

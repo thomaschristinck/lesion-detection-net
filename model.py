@@ -1140,7 +1140,7 @@ def compute_count_loss(target_count, pred_class_logits):
 	return loss
 '''
 
-def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_count):
+def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask):
 	
 	rpn_class_loss = compute_rpn_class_loss(rpn_match, rpn_class_logits)
 	rpn_bbox_loss = compute_rpn_bbox_loss(rpn_bbox, rpn_match, rpn_pred_bbox)
@@ -1781,8 +1781,12 @@ class MaskRCNN(nn.Module):
 		train_set = Dataset(train_dataset, self.config, augment=True)
 		val_set = Dataset(val_dataset, self.config, augment=True)
 
-		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
-		val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=True, num_workers=4)
+		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, 
+														shuffle=True, num_workers=4,
+														pin_memory=True)
+		val_generator = torch.utils.data.DataLoader(val_set, batch_size=1, 
+														shuffle=True, num_workers=4,
+														pin_memory=True)
 
 		# Train
 		log("\nStarting at epoch {}. LR={}\n".format(self.epoch+1, learning_rate))
@@ -1803,14 +1807,14 @@ class MaskRCNN(nn.Module):
 			log("Epoch {}/{}.".format(epoch,epochs))
 
 			# Training
-			loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask, loss_count = self.train_epoch(train_generator, optimizer, self.config.STEPS_PER_EPOCH)
+			loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask = self.train_epoch(train_generator, optimizer, self.config.STEPS_PER_EPOCH)
 
 			# Validation
-			val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask, val_loss_count = self.valid_epoch(val_generator, self.config.VALIDATION_STEPS)
+			val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask = self.valid_epoch(val_generator, self.config.VALIDATION_STEPS)
 
 			# Statistics
-			self.loss_history.append([loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask, loss_count])
-			self.val_loss_history.append([val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask, val_loss_count])
+			self.loss_history.append([loss, loss_rpn_class, loss_rpn_bbox, loss_mrcnn_class, loss_mrcnn_bbox, loss_mrcnn_mask])
+			self.val_loss_history.append([val_loss, val_loss_rpn_class, val_loss_rpn_bbox, val_loss_mrcnn_class, val_loss_mrcnn_bbox, val_loss_mrcnn_mask])
 			visualize.plot_loss(self.loss_history, self.val_loss_history, save=True, log_dir=self.log_dir)
 			#TODO:
 			#visualize.plot_roc
@@ -1830,7 +1834,6 @@ class MaskRCNN(nn.Module):
 		loss_mrcnn_class_sum = 0
 		loss_mrcnn_bbox_sum = 0
 		loss_mrcnn_mask_sum = 0
-		loss_count_sum = 0
 		step = 0
 
 		optimizer.zero_grad()
@@ -1875,7 +1878,7 @@ class MaskRCNN(nn.Module):
 				self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='training')
 
 			# Compute losses
-			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss= compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, gt_count)
+			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss= compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask)
 			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss 
 
 			# Backpropagation
@@ -1912,7 +1915,7 @@ class MaskRCNN(nn.Module):
 				break
 			step += 1
 
-		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum, loss_count_sum
+		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
 
 	def valid_epoch(self, datagenerator, steps):
 
@@ -1923,7 +1926,6 @@ class MaskRCNN(nn.Module):
 		loss_mrcnn_class_sum = 0
 		loss_mrcnn_bbox_sum = 0
 		loss_mrcnn_mask_sum = 0
-		loss_count_sum = 0
 
 		for inputs in datagenerator:
 			images = inputs[0]
@@ -1933,7 +1935,6 @@ class MaskRCNN(nn.Module):
 			gt_boxes = inputs[4]
 			gt_masks = inputs[5]
 			image_metas = inputs[6]
-			target_count = inputs[7][0]
 
 			# image_metas as numpy array
 			image_metas = image_metas.numpy()
@@ -1945,7 +1946,7 @@ class MaskRCNN(nn.Module):
 			gt_class_ids = Variable(gt_class_ids, volatile=True)
 			gt_boxes = Variable(gt_boxes, volatile=True)
 			gt_masks = Variable(gt_masks, volatile=True)
-			target_count = Variable(target_count, volatile=True)
+			#target_count = Variable(target_count, volatile=True)
 
 
 			# To GPU
@@ -1956,7 +1957,7 @@ class MaskRCNN(nn.Module):
 				gt_class_ids = gt_class_ids.cuda()
 				gt_boxes = gt_boxes.cuda()
 				gt_masks = gt_masks.cuda()
-				target_count = target_count.cuda()
+				#target_count = target_count.cuda()
 
 			# Run object detection
 			rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask = \
@@ -1966,7 +1967,7 @@ class MaskRCNN(nn.Module):
 				continue
 
 			# Compute losses
-			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask, target_count)
+			rpn_class_loss, rpn_bbox_loss, mrcnn_class_loss, mrcnn_bbox_loss, mrcnn_mask_loss = compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask)
 			loss = rpn_class_loss + rpn_bbox_loss + mrcnn_class_loss + mrcnn_bbox_loss + mrcnn_mask_loss 
 
 			# Progress
@@ -1989,7 +1990,7 @@ class MaskRCNN(nn.Module):
 				break
 			step += 1
 
-		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum, loss_count_sum
+		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
 
 	def evaluate_model(self, dataset, logs, nb_mc=10, mode='bbox'):
 		test_set = Dataset(dataset, self.config, augment=True)

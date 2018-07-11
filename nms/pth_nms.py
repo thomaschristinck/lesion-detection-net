@@ -46,6 +46,7 @@ def pth_nms(dets, thresh):
     num_out = torch.LongTensor(1)
     # keep = torch.cuda.LongTensor(dets.size(0))
     # num_out = torch.cuda.LongTensor(1)
+    
     nms.gpu_nms(keep, num_out, dets_temp, thresh)
 
     return order[keep[:num_out[0]].cuda()].contiguous()
