@@ -209,6 +209,64 @@ def build_image(image, target, boxes, masks, bunet_mask, class_ids, class_names,
 
     plt.show()
 
+'''
+def build_image3d(image, target, boxes, masks, bunet_mask, class_ids, class_names,
+                      scores=None, title="",
+                      figsize=(16, 16), ax=None):
+    """
+    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
+    masks: [height, width, num_instances]
+    class_ids: [num_instances]
+    class_names: list of class names of the dataset
+    scores: (optional) confidence scores for each box
+    figsize: (optional) the size of the image.
+    """
+    # Number of instances
+    N = boxes.shape[0]
+    if not N:
+        print("\n*** No instances to display *** \n")
+    else:
+        assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
+
+    if not ax:
+        fig, ax = plt.subplots(1, 3, figsize=figsize)
+
+    # Generate random colors
+    colors = random_colors(N)
+
+    # Show area outside image boundaries.
+    height, width = image.shape[:2]
+
+    for i in range(3):
+        ax[i].axis('off')
+
+    masked_image = image[:,:,0].copy() #astype(np.uint32)
+    for i in range(N):
+        color = colors[i]
+
+        # Bounding box
+        if not np.any(boxes[i]):
+            # Skip this instance. Has no bbox. Likely lost in image cropping.
+            continue
+        y1, x1, y2, x2 = boxes[i]
+        p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+                              alpha=0.7, linestyle="dashed",
+                              edgecolor=color, facecolor='none')
+        ax[0].add_patch(p)
+
+        # Label
+        class_id = class_ids[i]
+        score = scores[i] if scores is not None else None
+        label = class_names[class_id]
+        x = random.randint(x1, (x1 + x2) // 2)
+        caption = "{:.3f}".format(score)
+        ax[0].text(x1, y1 + 8, caption,
+                color='tab:gray', size=6, backgroundcolor="none")
+        ax[0].imshow(masked_image, cmap=plt.cm.pink)
+
+    return masked_image
+'''
+
 def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):
     """
     anchors: [n, (y1, x1, y2, x2)] list of anchors in image coordinates.
@@ -551,13 +609,19 @@ def plot_loss(loss, val_loss, save=True, log_dir=None):
         plt.pause(0.1)
 
 class IndexTracker(object):
-    def __init__(self, ax, X):
+    def __init__(self, ax, X, Y, Z):
         self.ax = ax
-        self.ax.axis('off')
+        self.ax[0].axis('off')
+        self.ax[1].axis('off')
+        self.ax[2].axis('off')
         self.X = X
+        self.Y = Y
+        self.Z = Z
         rows, cols, self.slices = X.shape
         self.ind = self.slices//2
-        self.im = ax.imshow(self.X[:,:, self.ind], cmap=plt.cm.pink)
+        self.im1 = ax[0].imshow(self.X[:,:, self.ind], cmap=plt.cm.pink_r)
+        self.im2 = ax[1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.pink_r)
+        self.im3 = ax[2].imshow(self.Z[:,:, self.ind], cmap=plt.cm.pink_r)
         self.update()
 
     def onscroll(self, event):
@@ -569,13 +633,61 @@ class IndexTracker(object):
         self.update()
 
     def update(self):
-        self.im.set_data(self.X[:,:,self.ind])
-        self.ax.set_ylabel('slice %s' % self.ind)
-        self.im.axes.figure.canvas.draw()
+        self.im1.set_data(self.X[:,:,self.ind])
+        self.im2.set_data(self.Y[:,:,self.ind])
+        self.im3.set_data(self.Z[:,:,self.ind])
+        self.ax[0].set_ylabel('slice %s' % self.ind)
+        self.im1.axes.figure.canvas.draw()
+        self.im2.axes.figure.canvas.draw()
+        self.im3.axes.figure.canvas.draw()
 
-def scroll_display(image):
-    fig, ax = plt.subplots(1,1)
-    tracker = IndexTracker(ax, image)
+def scroll_display(image1, image2, image3, figsize):
+    fig, ax = plt.subplots(1,3, figsize=figsize)
+    tracker = IndexTracker(ax, image1, image2, image3)
     fig.canvas.mpl_connect('scroll_event', tracker.onscroll)
     plt.show()
 
+def build_image3d(t2, target, netseg, unc, model, class_names, title="",
+                      figsize=(16, 16), ax=None):
+    """
+    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
+    masks: [height, width, num_instances]
+    class_ids: [num_instances]
+    class_names: list of class names of the dataset
+    scores: (optional) confidence scores for each box
+    figsize: (optional) the size of the image.
+    """
+    boxed_image = np.zeros([t2.shape[0], t2.shape[1], t2.shape[2]])
+
+    # Iterate through image slices
+    for idx in range(t2.shape[2]):
+        target_slice, _ = utils.remove_tiny_les(target[:,:,idx])
+        netseg_slice = netseg[:,:,idx]
+        t2_slice = t2[:,:,idx]
+        unc_slice = unc[:,:,idx]
+
+        # Stack slices to make the input image
+        image_slice = np.stack([t2_slice, unc_slice, netseg_slice], axis = 0)
+
+        results = model.detect([image_slice])
+        r = results[0]
+        boxes = r['rois']
+        masks = r['masks']
+        class_ids = r['class_ids'] 
+        scores =  r['scores']
+        image_slice = image_slice.transpose(1,2,0)
+
+        # Number of instances
+        N = boxes.shape[0]
+        if not N:
+            print("\n*** No instances to display *** \n")
+        else:
+            assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
+
+        # Generate bounding box slices
+        boxed_image[:,:,idx] = t2[:,:,idx].copy() #astype(np.uint32)
+
+        for i in range(N):
+            boxed_image[:,:,idx] = draw_box(t2[:,:,idx], boxes[i, 0:4], color=1.0)
+          
+    scroll_display(boxed_image, target, netseg, figsize)

@@ -84,6 +84,7 @@ t2 = np.asarray(t2)
 target = np.asarray(target)
 unc = np.asarray(unc)
 
+'''
 target_slice, _ = utils.remove_tiny_les(target[:,:,slice_index])
 netseg_slice = netseg[:,:,slice_index]
 t2_slice = t2[:,:,slice_index]
@@ -102,14 +103,20 @@ r = results[0]
 # Visualize bounding boxes with target lesions
 visualize.build_image(image_slice, target_slice, r['rois'], r['masks'], netseg_slice, r['class_ids'], class_names, r['scores'])
 '''
-scroll_results = np.zeros(t2.shape[2])
-for idx in range(t2.shape[2]):
-	image_slice = np.stack([t2[:,:,idx], unc[:,:,idx], netseg[:,:,idx]], axis = 0)
-	scroll_results[i] = model.detect([image_slice])
-	image_slice = image_slice.transpose(1,2,0)
-'''
-visualize.scroll_display(t2)
 
+# Stack slices to make the input image
+#image_slice = np.stack([t2, unc, netseg], axis = 0)
+
+#r = results[0]
+#image_slice = image_slice.transpose(1,2,0)
+
+visualize.build_image3d(t2, target, netseg, unc, model, class_names)
+
+
+
+
+
+'''
 dataset_train = MSDataset()
 dataset_train.load_data('/usr/local/data/thomasc/unet_out/3d_all_img_small', {'mode': 'train', 'shuffle': True if config.SHUFFLE is 1 else False, 'dim': config.BRAIN_DIMENSIONS,'mods': config.MODALITIES})    
 
@@ -117,3 +124,4 @@ test_set = modellib.Dataset(dataset_train, config, augment=True)
 data_gen = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 full_analyzer = Analyzer(model, MODEL_PATH, data_gen, join(out_dir, 'cca'), nb_mc=10)
 full_analyzer.roc(join(out_dir, 'cca'), thresh_start=0, thresh_stop=1, thresh_step=0.05)
+'''

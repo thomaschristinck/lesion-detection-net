@@ -955,6 +955,7 @@ class Mask(nn.Module):
 
 	def forward(self, x, rois):
 		x = pyramid_roi_align([rois] + x, self.pool_size, self.image_shape)
+		print('For masking, x fed into the mask network is of shape: ', x.shape)
 		x = self.conv1(self.padding(x))
 		x = self.bn1(x)
 		x = self.relu(x)
@@ -970,8 +971,9 @@ class Mask(nn.Module):
 		x = self.deconv(x)
 		x = self.relu(x)
 		x = self.conv5(x)
+		print('The ouput shape (pre-sigmoid): ', x.shape)
 		x = self.sigmoid(x)
-
+		print('The ouput shape (post-sigmoid): ', x.shape)
 		return x
 
 
