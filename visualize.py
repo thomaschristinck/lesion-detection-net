@@ -12,6 +12,7 @@ import random
 import itertools
 import colorsys
 import numpy as np
+import imageio
 from skimage.measure import find_contours
 import matplotlib.pyplot as plt
 if "DISPLAY" not in os.environ:
@@ -19,7 +20,7 @@ if "DISPLAY" not in os.environ:
 import matplotlib.patches as patches
 import matplotlib.lines as lines
 from matplotlib.patches import Polygon
-
+from os.path import join
 import utils
 
 
@@ -57,8 +58,8 @@ def random_colors(N, bright=True):
     To get visually distinct colors, generate them in HSV space then
     convert to RGB.
     """
-    brightness = 1.0 if bright else 0.7
-    hsv = [(i / N, 1, brightness) for i in range(N)]
+    brightness = 1.0 if bright else 0.8
+    hsv = [(0, 1, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     random.shuffle(colors)
     return colors
@@ -208,64 +209,6 @@ def build_image(image, target, boxes, masks, bunet_mask, class_ids, class_names,
         ax[2].imshow(bunet_mask, cmap=plt.cm.pink)
 
     plt.show()
-
-'''
-def build_image3d(image, target, boxes, masks, bunet_mask, class_ids, class_names,
-                      scores=None, title="",
-                      figsize=(16, 16), ax=None):
-    """
-    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
-    masks: [height, width, num_instances]
-    class_ids: [num_instances]
-    class_names: list of class names of the dataset
-    scores: (optional) confidence scores for each box
-    figsize: (optional) the size of the image.
-    """
-    # Number of instances
-    N = boxes.shape[0]
-    if not N:
-        print("\n*** No instances to display *** \n")
-    else:
-        assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
-
-    if not ax:
-        fig, ax = plt.subplots(1, 3, figsize=figsize)
-
-    # Generate random colors
-    colors = random_colors(N)
-
-    # Show area outside image boundaries.
-    height, width = image.shape[:2]
-
-    for i in range(3):
-        ax[i].axis('off')
-
-    masked_image = image[:,:,0].copy() #astype(np.uint32)
-    for i in range(N):
-        color = colors[i]
-
-        # Bounding box
-        if not np.any(boxes[i]):
-            # Skip this instance. Has no bbox. Likely lost in image cropping.
-            continue
-        y1, x1, y2, x2 = boxes[i]
-        p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
-                              alpha=0.7, linestyle="dashed",
-                              edgecolor=color, facecolor='none')
-        ax[0].add_patch(p)
-
-        # Label
-        class_id = class_ids[i]
-        score = scores[i] if scores is not None else None
-        label = class_names[class_id]
-        x = random.randint(x1, (x1 + x2) // 2)
-        caption = "{:.3f}".format(score)
-        ax[0].text(x1, y1 + 8, caption,
-                color='tab:gray', size=6, backgroundcolor="none")
-        ax[0].imshow(masked_image, cmap=plt.cm.pink)
-
-    return masked_image
-'''
 
 def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):
     """
@@ -425,8 +368,6 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     customizations.
 
     boxes: [N, (y1, x1, y2, x2, class_id)] in image coordinates.
-    refined_boxes: Like boxes, but draw with solid lines to show
-        that they're the result of refining 'boxes'.
     masks: [N, height, width]
     captions: List of N titles to display on each box
     visibilities: (optional) List of values of 0, 1, or 2. Determine how
@@ -435,15 +376,11 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     ax: (optional) Matplotlib axis to draw on.
     """
     # Number of boxes
-    assert boxes is not None or refined_boxes is not None
-    N = boxes.shape[0] if boxes is not None else refined_boxes.shape[0]
+    N = boxes.shape[0] if boxes is not None else 0
 
     # Matplotlib Axis
     if not ax:
         _, ax = plt.subplots(1, figsize=(12, 12))
-
-    # Generate random colors
-    colors = random_colors(N)
 
     # Show area outside image boundaries.
     margin = image.shape[0] // 10
@@ -451,9 +388,18 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     ax.set_xlim(-margin, image.shape[1] + margin)
     ax.axis('off')
 
+    # Setup image - if no boxes then return the given image as matplotlib axis object
     ax.set_title(title)
+    masked_image = image * 255
+    masked_image = masked_image.astype(np.uint32).copy()
 
-    masked_image = image.astype(np.uint32).copy()
+    if boxes is None:
+        ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.pink_r)
+        return ax
+
+    # Generate random colors
+    colors = random_colors(N, bright=False)
+ 
     for i in range(N):
         # Box visibility
         visibility = visibilities[i] if visibilities is not None else 1
@@ -481,29 +427,21 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                                   edgecolor=color, facecolor='none')
             ax.add_patch(p)
 
-        # Refined boxes
-        if refined_boxes is not None and visibility > 0:
-            ry1, rx1, ry2, rx2 = refined_boxes[i].astype(np.int32)
-            p = patches.Rectangle((rx1, ry1), rx2 - rx1, ry2 - ry1, linewidth=2,
-                                  edgecolor=color, facecolor='none')
-            ax.add_patch(p)
-            # Connect the top-left corners of the anchor and proposal
-            if boxes is not None:
-                ax.add_line(lines.Line2D([x1, rx1], [y1, ry1], color=color))
-
         # Captions
         if captions is not None:
             caption = captions[i]
+            caption = np.around(caption, decimals=3)
             # If there are refined boxes, display captions on them
             if refined_boxes is not None:
                 y1, x1, y2, x2 = ry1, rx1, ry2, rx2
             x = random.randint(x1, (x1 + x2) // 2)
-            ax.text(x1, y1, caption, size=11, verticalalignment='top',
+            ax.text(x1, y1, caption, size=8, verticalalignment='top',
                     color='w', backgroundcolor="none",
-                    bbox={'facecolor': color, 'alpha': 0.5,
-                          'pad': 2, 'edgecolor': 'none'})
+                    bbox={'facecolor': color, 'alpha': 0.4,
+                          'pad': 1, 'edgecolor': 'none'})
 
         # Masks
+
         if masks is not None:
             mask = masks[:, :, i]
             masked_image = apply_mask(masked_image, mask, color)
@@ -518,7 +456,10 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                 verts = np.fliplr(verts) - 1
                 p = Polygon(verts, facecolor="none", edgecolor=color)
                 ax.add_patch(p)
-    ax.imshow(masked_image.astype(np.uint8))
+
+    ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.pink_r)
+   
+    return ax
 
 def plot_loss(loss, val_loss, save=True, log_dir=None):
     loss = np.array(loss)
@@ -617,15 +558,17 @@ class IndexTracker(object):
         self.X = X
         self.Y = Y
         self.Z = Z
-        rows, cols, self.slices = X.shape
+        x_rows, x_cols,  self.slices, x_colors = X.shape
+        print('X shape is ', x_rows, x_cols, self.slices, x_colors)
+        print('X max is ', np.max(self.X))
+        print('Y shape is : ', self.Y.shape)
         self.ind = self.slices//2
-        self.im1 = ax[0].imshow(self.X[:,:, self.ind], cmap=plt.cm.pink_r)
+        self.im1 = ax[0].imshow(self.X[:,:, self.ind,:])
         self.im2 = ax[1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.pink_r)
         self.im3 = ax[2].imshow(self.Z[:,:, self.ind], cmap=plt.cm.pink_r)
         self.update()
 
     def onscroll(self, event):
-        #print("%s %s" % (event.button, event.step))
         if event.button == 'up':
             self.ind = (self.ind + 1) % self.slices
         else:
@@ -637,14 +580,15 @@ class IndexTracker(object):
         self.im2.set_data(self.Y[:,:,self.ind])
         self.im3.set_data(self.Z[:,:,self.ind])
         self.ax[0].set_ylabel('slice %s' % self.ind)
-        self.im1.axes.figure.canvas.draw()
-        self.im2.axes.figure.canvas.draw()
-        self.im3.axes.figure.canvas.draw()
+        self.im1.axes.figure.canvas.draw_idle()
+        self.im2.axes.figure.canvas.draw_idle()
+        self.im3.axes.figure.canvas.draw_idle()
 
 def scroll_display(image1, image2, image3, figsize):
-    fig, ax = plt.subplots(1,3, figsize=figsize)
+    fig, ax = plt.subplots(1,3, figsize=(20,20))
     tracker = IndexTracker(ax, image1, image2, image3)
     fig.canvas.mpl_connect('scroll_event', tracker.onscroll)
+    plt.tight_layout()
     plt.show()
 
 def build_image3d(t2, target, netseg, unc, model, class_names, title="",
@@ -657,10 +601,13 @@ def build_image3d(t2, target, netseg, unc, model, class_names, title="",
     scores: (optional) confidence scores for each box
     figsize: (optional) the size of the image.
     """
-    boxed_image = np.zeros([t2.shape[0], t2.shape[1], t2.shape[2]])
-
-    # Iterate through image slices
-    for idx in range(t2.shape[2]):
+    # Iterate through image slices of depth t2.shape[2]
+    depth = t2.shape[2]
+    fig, ax = plt.subplots(1,3, figsize=(20,20))
+    ax[0].axis('off')
+    ax[1].axis('off')
+    ax[2].axis('off')
+    for idx in range(depth):
         target_slice, _ = utils.remove_tiny_les(target[:,:,idx])
         netseg_slice = netseg[:,:,idx]
         t2_slice = t2[:,:,idx]
@@ -675,19 +622,37 @@ def build_image3d(t2, target, netseg, unc, model, class_names, title="",
         masks = r['masks']
         class_ids = r['class_ids'] 
         scores =  r['scores']
+        #scores = np.around(scores, decimals=2)
         image_slice = image_slice.transpose(1,2,0)
 
         # Number of instances
         N = boxes.shape[0]
-        if not N:
-            print("\n*** No instances to display *** \n")
-        else:
-            assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
 
         # Generate bounding box slices
-        boxed_image[:,:,idx] = t2[:,:,idx].copy() #astype(np.uint32)
+        if N != 0:
+            assert N == masks.shape[-1] == class_ids.shape[0]
+            ax[0] = draw_boxes(t2_slice, boxes, captions=scores)
+        else:
+            ax[0] = draw_boxes(t2_slice)       
 
-        for i in range(N):
-            boxed_image[:,:,idx] = draw_box(t2[:,:,idx], boxes[i, 0:4], color=1.0)
-          
+        plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', str(idx) + '.png'), bbox_inches='tight')
+        plt.close('all')
+
+    print('---------- Reading images into numpy array ------------')
+
+    im = imageio.imread(join('/usr/local/data/thomasc/outputs/det_net', str(idx) + '.png'), as_gray=False, pilmode="RGB")
+    boxed_image = np.zeros([depth, im.shape[0], im.shape[1], im.shape[2]])
+
+    for idx in range(depth):
+        boxed_image[idx] = imageio.imread(join('/usr/local/data/thomasc/outputs/det_net', str(idx) + '.png'), as_gray=False, pilmode="RGB")
+    plt.close('all')
+    
+    boxed_image = boxed_image.astype(np.uint8)
+
+    target = target * 255
+    target = target.astype(np.uint32).copy()
+    netseg = netseg * 255
+    netseg = netseg.astype(np.uint32).copy()
+    boxed_image = boxed_image.transpose(1, 2, 0, 3)
+ 
     scroll_display(boxed_image, target, netseg, figsize)
