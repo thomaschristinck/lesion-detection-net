@@ -321,16 +321,31 @@ if __name__ == '__main__':
 		# Training - Stage 1
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 3,
-					epochs=10,
+					learning_rate=config.LEARNING_RATE,
+					epochs=5,
 					layers='heads')
+
+		# Training - Stage 2
+		print("Fine tune Resnet stage 4 and up")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE,
+					epochs=20,
+					layers='4+')
 
 		# Training - Stage 3
 		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 3 , #Changed from /10
-					epochs=20,
+					learning_rate=config.LEARNING_RATE / 5 , #Changed from /10
+					epochs=35,
+					layers='all')
+		
+		# Training - Stage 4
+		# Fine tune all layers
+		print("Fine tune all layers (learning rate further reduced)")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE / 50 , #Changed from /10
+					epochs=50,
 					layers='all')
 
 	elif args.command == "evaluate":

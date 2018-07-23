@@ -383,9 +383,6 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
         _, ax = plt.subplots(1, figsize=(12, 12))
 
     # Show area outside image boundaries.
-    margin = image.shape[0] // 10
-    ax.set_ylim(image.shape[0] + margin, -margin)
-    ax.set_xlim(-margin, image.shape[1] + margin)
     ax.axis('off')
 
     # Setup image - if no boxes then return the given image as matplotlib axis object
@@ -394,7 +391,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     masked_image = masked_image.astype(np.uint32).copy()
 
     if boxes is None:
-        ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.pink_r)
+        ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
         return ax
 
     # Generate random colors
@@ -457,7 +454,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                 p = Polygon(verts, facecolor="none", edgecolor=color)
                 ax.add_patch(p)
 
-    ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.pink_r)
+    ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
    
     return ax
 
@@ -555,6 +552,10 @@ class IndexTracker(object):
         self.ax[0].axis('off')
         self.ax[1].axis('off')
         self.ax[2].axis('off')
+        fontdict = {'fontsize':10}
+        self.ax[0].set_title(r'Det-Net Output and T2 Image (confidence thresh=0.95)', fontdict)
+        self.ax[1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
+        self.ax[2].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
         self.X = X
         self.Y = Y
         self.Z = Z
@@ -564,8 +565,8 @@ class IndexTracker(object):
         print('Y shape is : ', self.Y.shape)
         self.ind = self.slices//2
         self.im1 = ax[0].imshow(self.X[:,:, self.ind,:])
-        self.im2 = ax[1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.pink_r)
-        self.im3 = ax[2].imshow(self.Z[:,:, self.ind], cmap=plt.cm.pink_r)
+        self.im2 = ax[1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.gray_r)
+        self.im3 = ax[2].imshow(self.Z[:,:, self.ind], cmap=plt.cm.gray_r)
         self.update()
 
     def onscroll(self, event):
@@ -591,7 +592,7 @@ def scroll_display(image1, image2, image3, figsize):
     plt.tight_layout()
     plt.show()
 
-def build_image3d(t2, target, netseg, unc, model, class_names, title="",
+def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="",
                       figsize=(16, 16), ax=None):
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
@@ -651,8 +652,8 @@ def build_image3d(t2, target, netseg, unc, model, class_names, title="",
 
     target = target * 255
     target = target.astype(np.uint32).copy()
-    netseg = netseg * 255
-    netseg = netseg.astype(np.uint32).copy()
+    threshed = threshed * 255
+    threshed = threshed.astype(np.uint32).copy()
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
  
-    scroll_display(boxed_image, target, netseg, figsize)
+    scroll_display(boxed_image, target, threshed, figsize)
