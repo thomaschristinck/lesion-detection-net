@@ -1186,8 +1186,8 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# Now combine image data into a 192 * 192 * 3 image 
 	# Trying stacking t2 images to remove the net mask bias - init using weights trained on 
 	# images with 3 modalities
-	#image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
-	image = np.stack([t2_image, t2_image, t2_image], axis=0)
+	image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
+	#image = np.stack([t2_image, t2_image, t2_image], axis=0)
 	shape = image.shape
 
 	image, window, scale, padding = utils.resize_image(

@@ -10,6 +10,7 @@ import skimage.io
 import skimage
 from skimage import transform
 import torch
+from torch import nn
 import visualize
 import nrrd
 from os.path import join

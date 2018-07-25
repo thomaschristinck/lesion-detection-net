@@ -560,9 +560,6 @@ class IndexTracker(object):
         self.Y = Y
         self.Z = Z
         x_rows, x_cols,  self.slices, x_colors = X.shape
-        print('X shape is ', x_rows, x_cols, self.slices, x_colors)
-        print('X max is ', np.max(self.X))
-        print('Y shape is : ', self.Y.shape)
         self.ind = self.slices//2
         self.im1 = ax[0].imshow(self.X[:,:, self.ind,:])
         self.im2 = ax[1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.gray_r)
@@ -657,3 +654,4 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
  
     scroll_display(boxed_image, target, threshed, figsize)
+

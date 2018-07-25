@@ -35,7 +35,6 @@ class InferenceConfig(launcher.DataConfig):
     IMAGES_PER_GPU = 1
 
 config = InferenceConfig()
-config.display()
 
 # Path to trained weights file
 # Download this file and place in the root of your
@@ -62,14 +61,15 @@ class_names = ['BG', 'lesion']
 
 # Load a random image from the images folder
 file_names = sorted(os.listdir(IMAGE_DIR))
-index = random.randint(0,20)
+index = random.randint(0,23)
 
 # Get index of each image
-netseg_idx = (index // 5) * 5 
-t2_idx = (index // 5) * 5 + 1
-target_idx = (index // 5) * 5 + 2
-unc_idx = (index // 5) * 5 + 3
-threshed_idx = (index // 5 ) * 5 + 4
+bbox_idx = (index // 6) * 6
+netseg_idx = (index // 6) * 6 + 1 
+t2_idx = (index // 6) * 6 + 2
+target_idx = (index // 6) * 6 + 3
+unc_idx = (index // 6) * 6 + 4
+threshed_idx = (index // 6 ) * 6 + 5
 
 netseg, opts = nrrd.read(join(IMAGE_DIR, file_names[netseg_idx]))
 t2, opts = nrrd.read(join(IMAGE_DIR, file_names[t2_idx]))
@@ -77,6 +77,7 @@ target, opts = nrrd.read(join(IMAGE_DIR, file_names[target_idx]))
 unc, opts = nrrd.read(join(IMAGE_DIR, file_names[unc_idx]))
 threshed, opts = nrrd.read(join(IMAGE_DIR, file_names[threshed_idx]))
 
+print('File being viewed : ', join(IMAGE_DIR, file_names[t2_idx]))
 netseg = np.asarray(netseg)
 t2 = np.asarray(t2)
 target = np.asarray(target)
