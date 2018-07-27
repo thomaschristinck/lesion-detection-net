@@ -84,6 +84,9 @@ target = np.asarray(target)
 unc = np.asarray(unc)
 threshed = np.asarray(threshed)
 
+
+threshed, _ = utils.remove_tiny_les(threshed, nvox=2)
+target, _ = utils.remove_tiny_les(target, nvox=2)
 # Build the 3d image to be viewed
 visualize.build_image3d(t2, target, netseg, unc, threshed, model, class_names)
 
