@@ -84,6 +84,25 @@ target = np.asarray(target)
 unc = np.asarray(unc)
 threshed = np.asarray(threshed)
 
+fig, ax = plt.subplots(1,1, figsize=(20,20))
+ax.axis('off')
+ax.imshow(unc[:,:,32], cmap=plt.cm.gist_heat_r)
+plt.savefig(os.path.join(ROOT_DIR, 'unc1.png'), bbox_inches='tight')
+
+fig, ax = plt.subplots(1,1, figsize=(20,20))
+ax.axis('off')
+ax.imshow(unc[:,:,28], cmap=plt.cm.gist_heat_r)
+plt.savefig(os.path.join(ROOT_DIR, 'unc2.png'), bbox_inches='tight')
+
+fig, ax = plt.subplots(1,1, figsize=(20,20))
+ax.axis('off')
+ax.imshow(t2[:,:,32], cmap=plt.cm.gray_r)
+plt.savefig(os.path.join(ROOT_DIR, 't21.png'), bbox_inches='tight')
+
+fig, ax = plt.subplots(1,1, figsize=(20,20))
+ax.axis('off')
+ax.imshow(t2[:,:,28], cmap=plt.cm.gray_r)
+plt.savefig(os.path.join(ROOT_DIR, 't22.png'), bbox_inches='tight')
 
 threshed, _ = utils.remove_tiny_les(threshed, nvox=2)
 target, _ = utils.remove_tiny_les(target, nvox=2)

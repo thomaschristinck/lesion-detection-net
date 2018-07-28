@@ -547,23 +547,28 @@ def plot_loss(loss, val_loss, save=True, log_dir=None):
         plt.pause(0.1)
 
 class IndexTracker(object):
-    def __init__(self, ax, X, Y, Z):
+    def __init__(self, ax, X, Y, Z, W):
         self.ax = ax
-        self.ax[0].axis('off')
-        self.ax[1].axis('off')
-        self.ax[2].axis('off')
+        plt.subplots_adjust(top=0.9)
+        self.ax[0][0].axis('off')
+        self.ax[0][1].axis('off')
+        self.ax[1][0].axis('off')
+        self.ax[1][1].axis('off')
         fontdict = {'fontsize':10}
-        self.ax[0].set_title(r'Det-Net Output and T2 Image (confidence thresh=0.95)', fontdict)
-        self.ax[1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
-        self.ax[2].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
+        self.ax[0][0].set_title(r'Det-Net Output and T2 Image (confidence thresh=0.95)', fontdict)
+        self.ax[0][1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
+        self.ax[1][0].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
+        self.ax[1][1].set_title(r'U-Net MC Sample Variance', fontdict=fontdict)
+        self.W = W
         self.X = X
         self.Y = Y
         self.Z = Z
         x_rows, x_cols,  self.slices, x_colors = X.shape
         self.ind = self.slices//2
-        self.im1 = ax[0].imshow(self.X[:,:, self.ind,:])
-        self.im2 = ax[1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.gray_r)
-        self.im3 = ax[2].imshow(self.Z[:,:, self.ind], cmap=plt.cm.gray_r)
+        self.im1 = ax[0][0].imshow(self.X[:,:, self.ind,:])
+        self.im2 = ax[0][1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.gray_r)
+        self.im3 = ax[1][0].imshow(self.Z[:,:, self.ind], cmap=plt.cm.gray_r)
+        self.im4 = ax[1][1].imshow(self.W[:,:, self.ind], cmap=plt.cm.pink_r)
         self.update()
 
     def onscroll(self, event):
@@ -574,17 +579,20 @@ class IndexTracker(object):
         self.update()
 
     def update(self):
+        plt.subplots_adjust(top=0.9)
         self.im1.set_data(self.X[:,:,self.ind])
         self.im2.set_data(self.Y[:,:,self.ind])
         self.im3.set_data(self.Z[:,:,self.ind])
-        self.ax[0].set_ylabel('slice %s' % self.ind)
+        self.im4.set_data(self.W[:,:,self.ind])
+        self.ax[0][0].set_ylabel('slice %s' % self.ind)
         self.im1.axes.figure.canvas.draw_idle()
         self.im2.axes.figure.canvas.draw_idle()
         self.im3.axes.figure.canvas.draw_idle()
+        self.im4.axes.figure.canvas.draw_idle()
 
-def scroll_display(image1, image2, image3, figsize):
-    fig, ax = plt.subplots(1,3, figsize=(20,20))
-    tracker = IndexTracker(ax, image1, image2, image3)
+def scroll_display(image1, image2, image3, image4, figsize):
+    fig, ax = plt.subplots(2,2, figsize=(20,20))
+    tracker = IndexTracker(ax, image1, image2, image3, image4)
     fig.canvas.mpl_connect('scroll_event', tracker.onscroll)
     plt.tight_layout()
     plt.show()
@@ -601,10 +609,11 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     """
     # Iterate through image slices of depth t2.shape[2]
     depth = t2.shape[2]
-    fig, ax = plt.subplots(1,3, figsize=(20,20))
-    ax[0].axis('off')
-    ax[1].axis('off')
-    ax[2].axis('off')
+    fig, ax = plt.subplots(2,2, figsize=(20,20))
+    ax[0][0].axis('off')
+    ax[0][1].axis('off')
+    ax[1][0].axis('off')
+    ax[1][1].axis('off')
     for idx in range(depth):
         target_slice, _ = utils.remove_tiny_les(target[:,:,idx])
         netseg_slice = netseg[:,:,idx]
@@ -629,9 +638,9 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         # Generate bounding box slices
         if N != 0:
             assert N == masks.shape[-1] == class_ids.shape[0]
-            ax[0] = draw_boxes(t2_slice, boxes, captions=scores)
+            ax[0][0] = draw_boxes(t2_slice, boxes, captions=scores)
         else:
-            ax[0] = draw_boxes(t2_slice)       
+            ax[0][0] = draw_boxes(t2_slice)       
 
         plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', str(idx) + '.png'), bbox_inches='tight')
         plt.close('all')
@@ -653,5 +662,5 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     threshed = threshed.astype(np.uint32).copy()
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
  
-    scroll_display(boxed_image, target, threshed, figsize)
+    scroll_display(boxed_image, target, threshed, unc, figsize)
 
