@@ -1996,10 +1996,56 @@ class MaskRCNN(nn.Module):
 		test_set = Dataset(dataset, self.config, augment=True)
 		test_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
 
-		analyzer = MRCNNAnalyzer(model, self.config, test_generator, logs_dir, nb_mc=2)
-		sigmoid_thresh=0.01
-		analyzer.cca('test_stats_thresh{}.csv'.format(sigmoid_thresh), sigmoid_thresh)
+		result_list = []
+		for threshold in range(0, 11, 1):
+			pred_stats = {'ntp': 0, 'nfp': 0, 'nfn': 0, 'fdr': 0, 'tpr': 0, 'nles': 0, 'nles_gt': 0}
+			threshold *= 0.1
+			nb_images = 0
+			for inputs in datagenerator:
+				images = inputs[0]
+				rpn_match = inputs[1]
+				rpn_bbox = inputs[2]
+				gt_class_ids = inputs[3]
+				gt_boxes = inputs[4]
+				gt_masks = inputs[5]
+				image_metas = inputs[6]
 
+				# Image_metas as numpy array
+				image_metas = image_metas.numpy()
+
+				# Wrap in variables
+				images = Variable(images, volatile=True)
+				rpn_match = Variable(rpn_match, volatile=True)
+				rpn_bbox = Variable(rpn_bbox, volatile=True)
+				gt_class_ids = Variable(gt_class_ids, volatile=True)
+				gt_boxes = Variable(gt_boxes, volatile=True)
+				gt_masks = Variable(gt_masks, volatile=True)
+
+				# To GPU
+				if self.config.GPU_COUNT:
+					images = images.cuda()
+					rpn_match = rpn_match.cuda()
+					rpn_bbox = rpn_bbox.cuda()
+					gt_class_ids = gt_class_ids.cuda()
+					gt_boxes = gt_boxes.cuda()
+					gt_masks = gt_masks.cuda()
+
+
+				# Run prediction and then evaluate results at several different threshold values.
+				detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
+				pred_stats_ex = evaluate.cca_img_no_unc(images[2], detections, gt_masks, thresh=threshold)
+				for idx in pred_stats:
+					pred_stats[idx] += pred_stats_ex[idx]
+				nb_images += 1
+			for idx in pred_stats:
+				pred_stats[idx] /= nb_images
+			result_list.append(pred_stats)
+		# Now plot the items of interest (TPR / FPR)
+		plt.plot([thresh_level for thresh_level in range(len(result_list))], [(pred_stats['tpr'] / pred_stats['fdr']) 
+			for pred_stats in results_list])
+		plt.show()
+
+		
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
 		as an input to the neural network.

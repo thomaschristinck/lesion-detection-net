@@ -354,14 +354,10 @@ if __name__ == '__main__':
 		dataset_test.load_data(args.dataset, {'mode': 'test', 'shuffle': False, 'mods': config.MODALITIES})
 	
 		print("Running evaluation on {} images.".format(args.limit))
-		#TODO; evaluate bounding box (mode='bbox') and segmentation (mode='segm') separately
-
-		model.evaluate_model(model, dataset_test, args.logs, nb_mc=10, mode='bbox')
-		'''
-		analyzer = MRCNNAnalyzer(model, config, dataset_test, args.logs, nb_mc=2)
-		sigmoid_thresh=0.01
-		analyzer.cca('test_stats_thresh{}.csv'.format(sigmoid_thresh), sigmoid_thresh)
-		'''
+		
+		# Evaluate the model (produce TPR/FPR graphs)
+		model.evaluate_model(model, dataset_test, args.logs)
+	
 		
 	else:
 		print("'{}' is not recognized. "
