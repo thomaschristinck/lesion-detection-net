@@ -5,7 +5,7 @@ This is a pytorch implementation of Mask R-CNN that is largely based on multimod
 
 1. Clone this repository.
 ```git clone https://github.com/thomaschristinck/detection_net```
-2. On blacktusk go to "/usr/local/data/thomasc/unet_out/all_img" and copy these files somewhere ("data_path")
+2. On blacktusk go to "/usr/local/data/thomasc/unet_out/3d_all_img_small" and copy these files somewhere ("data_path")
 3. You can use the imagenet weights for now; go to "usr/local/data/thomasc/checkpoints" and copy "resnet50_imagenet.pth" to "det_net" folder.
 4. Make sure you're using pytorch0.3 (install with pip by ```pip install http://download.pytorch.org/whl/cu80/torch-0.3.1-cp35-cp35m-linux_x86_64.whl```). Later I'll hopefully upgrade everything to 0.4.
 5. ```pip install -r requirements.txt```
