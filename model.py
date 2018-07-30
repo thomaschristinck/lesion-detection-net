@@ -28,12 +28,14 @@ from torchvision import transforms
 from scipy import ndimage
 
 import utils
+from tools import evaluate
 import visualize
 from nms.nms_wrapper import nms
 from roialign.roi_align.crop_and_resize import CropAndResizeFunction
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
+plt.style.use('bmh')
 
 
 ############################################################
@@ -1393,10 +1395,11 @@ class Dataset(torch.utils.data.Dataset):
 
 		# Add to batch
 		rpn_match = rpn_match[:, np.newaxis]
-		image = mold_image(image.astype(np.float32), self._config)
-
+		
+		#image = mold_image(image.astype(np.float32), self._config)
+	
 		# Convert
-		image = image.transpose(2, 0, 1)
+		image = image.transpose(2, 0, 1).copy()
 		image = torch.from_numpy(image).float()
 		rpn_match = torch.from_numpy(rpn_match)
 		rpn_bbox = torch.from_numpy(rpn_bbox).float()
@@ -1404,7 +1407,6 @@ class Dataset(torch.utils.data.Dataset):
 		gt_boxes = torch.from_numpy(gt_boxes).float()
 		gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(2,0,1)).float()
 		image_metas = torch.from_numpy(image_metas)
-		#nles = torch.Tensor(nles)
 		
 		#Return all images
 		return image, rpn_match, rpn_bbox, gt_class_ids, gt_boxes, gt_masks, image_metas
@@ -1992,16 +1994,23 @@ class MaskRCNN(nn.Module):
 
 		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
 
-	def evaluate_model(self, dataset, logs, nb_mc=10, mode='bbox'):
+	def evaluate_model(self, dataset, logs, nb_mc=10):
 		test_set = Dataset(dataset, self.config, augment=True)
-		test_generator = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
+		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
 		result_list = []
-		for threshold in range(0, 11, 1):
-			pred_stats = {'ntp': 0, 'nfp': 0, 'nfn': 0, 'fdr': 0, 'tpr': 0, 'nles': 0, 'nles_gt': 0}
-			threshold *= 0.1
+		for threshold in range(0, 101, 10):
+			pred_stats = {'ntp': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
+				'nfp': {'all': 0, 'small': 0, 'med': 0, 'large': 0},
+				'nfn': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
+				'fdr': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
+				'tpr': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
+				'nles': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
+				'nles_gt': {'all': 0, 'small': 0, 'med': 0, 'large': 0}}
+			threshold *= 0.01
+			print('---- Threshold at {} ------'.format(threshold))
 			nb_images = 0
-			for inputs in datagenerator:
+			for inputs in test_generator:
 				images = inputs[0]
 				rpn_match = inputs[1]
 				rpn_bbox = inputs[2]
@@ -2030,22 +2039,60 @@ class MaskRCNN(nn.Module):
 					gt_boxes = gt_boxes.cuda()
 					gt_masks = gt_masks.cuda()
 
-
 				# Run prediction and then evaluate results at several different threshold values.
 				detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
-				pred_stats_ex = evaluate.cca_img_no_unc(images[2], detections, gt_masks, thresh=threshold)
-				for idx in pred_stats:
-					pred_stats[idx] += pred_stats_ex[idx]
+				pred_stats_ex = evaluate.cca_img_no_unc(images[0, 2], detections, gt_masks, thresh=threshold)
+				for dicts in pred_stats:
+					for idx in pred_stats[dicts]:
+						pred_stats[dicts][idx] += pred_stats_ex[dicts][idx]
+					
 				nb_images += 1
-			for idx in pred_stats:
-				pred_stats[idx] /= nb_images
+				if nb_images % 40 == 0 and nb_images >= 40:
+					print('Done {}/{} images'.format(nb_images, len(test_generator)))
+			for dicts in pred_stats:
+				for idx in pred_stats[dicts]:
+					pred_stats[dicts][idx] /= nb_images
 			result_list.append(pred_stats)
 		# Now plot the items of interest (TPR / FPR)
-		plt.plot([thresh_level for thresh_level in range(len(result_list))], [(pred_stats['tpr'] / pred_stats['fdr']) 
-			for pred_stats in results_list])
+		x =[]
+		all_tpr = []
+		all_fdr = []
+		small_tpr = []
+		small_fdr = []
+		med_tpr = []
+		med_fdr = []
+		large_tpr = []
+		large_fdr = []
+		large_y = []
+		for thresh_level in range(len(result_list)):
+			x.append(thresh_level)
+		for pred in result_list:
+			# Clean this up later
+			for bin_size in pred['fdr']:
+				if bin_size == 'small':
+					small_tpr.append(pred['tpr'][bin_size])
+					small_fdr.append(pred['fdr'][bin_size])
+				elif bin_size == 'med':
+					med_tpr.append(pred['tpr'][bin_size])
+					med_fdr.append(pred['fdr'][bin_size])
+				elif bin_size == 'large':
+					large_tpr.append(pred['tpr'][bin_size])
+					large_fdr.append(pred['fdr'][bin_size])
+				elif bin_size == 'all':
+					all_tpr.append(pred['tpr'][bin_size])
+					all_fdr.append(pred['fdr'][bin_size])
+
+		print('Small_tpr : ', small_tpr)
+		print('Small_fdr : ', small_fdr)
+		print('Large_tpr : ', large_tpr)
+		print('Large_fdr : ', large_fdr)
+		plt.plot(all_fdr, all_tpr)
+		plt.plot(small_fdr, small_tpr)
+		plt.plot(med_fdr, med_tpr)
+		plt.plot(large_fdr, large_tpr)
 		plt.show()
 
-		
+
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
 		as an input to the neural network.

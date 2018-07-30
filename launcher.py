@@ -106,10 +106,9 @@ class MSDataset(utils.Dataset):
 			self._image_ids = self._image_ids[valid_idx:]
 
 		# Build (or rebuild) everything else from the info dicts.
-		self.num_images = len(self._image_ids)
+		self.num_images = int(len(self._image_ids) / 8)
 		self._image_ids = np.arange(self.num_images)
-
-
+		
 	@staticmethod
 	def _rotate(l, n):
 		return l[-n:] + l[:-n]
@@ -356,7 +355,7 @@ if __name__ == '__main__':
 		print("Running evaluation on {} images.".format(args.limit))
 		
 		# Evaluate the model (produce TPR/FPR graphs)
-		model.evaluate_model(model, dataset_test, args.logs)
+		model.evaluate_model(dataset_test, args.logs)
 	
 		
 	else:

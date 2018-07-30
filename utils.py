@@ -37,16 +37,16 @@ def get_3D_lesion_bin(nvox):
 	else:
 		return 1
 
-def get_2D_lesion_bin(nvox):
+def get_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-	if 3 <= nvox <= 8:
-		return 1
-	elif 9 <= nvox <= 20:
-		return 2
-	elif nvox >= 21:
-		return 3
+	if 3 <= nvox <= 10:
+		return 'small'
+	elif 11 <= nvox <= 50:
+		return 'med'
+	elif nvox >= 51:
+		return 'large'
 	else:
-		return 1
+		return 'small'
 
 def remove_tiny_les(lesion_image, nvox=2):
 	labels, nles = ndimage.label(lesion_image)
