@@ -31,6 +31,8 @@ import utils
 from tools import evaluate
 import visualize
 from nms.nms_wrapper import nms
+import sklearn
+from sklearn.metrics import roc_curve
 from roialign.roi_align.crop_and_resize import CropAndResizeFunction
 from timeit import default_timer as timer
 
@@ -1155,9 +1157,8 @@ def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_
 ############################################################
 #  Data Generator
 ############################################################
-	
 def load_image_gt(dataset, config, image_id, augment=False,
-				  use_mini_mask=False):
+				  use_mini_mask=False, mode='train'):
 	"""Load and return ground truth data for an image (image, mask, bounding boxes).
 
 	augment: If true, apply random image augmentation. Currently, only
@@ -1182,6 +1183,9 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
 	net_mask, gt_mask, class_ids, nles = dataset.load_masks(image_id, dataset, config)
 
+	if mode == 'test':
+		return net_mask, gt_mask
+
 	nles = np.asarray([nles])
 	nles = nles.astype(np.int16)
 
@@ -1192,16 +1196,16 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	#image = np.stack([t2_image, t2_image, t2_image], axis=0)
 	shape = image.shape
 
-	image, window, scale, padding = utils.resize_image(
-		image,
-		min_dim=config.IMAGE_MIN_DIM,
-		max_dim=config.IMAGE_MAX_DIM,
-		padding=config.IMAGE_PADDING,
-		dims=config.BRAIN_DIMENSIONS)
+	#image, window, scale, padding = utils.resize_image(
+	#	image,
+	#	min_dim=config.IMAGE_MIN_DIM,
+	#	max_dim=config.IMAGE_MAX_DIM,
+	#	padding=config.IMAGE_PADDING,
+	#	dims=config.BRAIN_DIMENSIONS)
 	
 	# Resize masks - ultimately will compress lesion mask size to save memory (refer to Mask RCNN Paper)
 	dims=config.BRAIN_DIMENSIONS
-	gt_mask = utils.resize_mask(gt_mask, scale, padding, dims)
+	#gt_mask = utils.resize_mask(gt_mask, scale, padding, dims)
 
 	# Random horizontal flips.
 	if augment:
@@ -1220,6 +1224,7 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	image_meta = compose_image_meta(image_id, shape, window)
 
 	return image, class_ids, bbox, gt_mask, image_meta, nles
+	
 
 def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 	"""Given the anchors and GT boxes, compute overlaps and identify positive
@@ -1321,7 +1326,7 @@ def build_rpn_targets(image_shape, anchors, gt_boxes, config):
 	return rpn_match, rpn_bbox
 
 class Dataset(torch.utils.data.Dataset):
-	def __init__(self, dataset, config, augment=True):
+	def __init__(self, dataset, config, mode, augment=True):
 		"""A generator that returns images and corresponding target class ids,
 			bounding box deltas, and masks.
 
@@ -1353,7 +1358,7 @@ class Dataset(torch.utils.data.Dataset):
 		self._image_index = -1
 		self._image_ids = np.copy(dataset._image_ids)
 		self._error_count = 0
-
+		self._mode = mode
 		self._dataset = dataset
 		self._config = config
 		self._augment = augment
@@ -1371,9 +1376,19 @@ class Dataset(torch.utils.data.Dataset):
 
 		# Get GT bounding boxes and masks for image.
 		image_id = self._image_ids[image_index]
+
+		if self._mode == 'test':
+			netseg, gt_masks = \
+			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
+						  use_mini_mask=self._config.USE_MINI_MASK, mode=self._mode)
+			gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(3,0,1,2)).float()
+			netseg = torch.from_numpy(netseg).float()
+
+			return netseg, gt_masks
+
 		image, gt_class_ids, gt_boxes, gt_masks, image_metas, nles = \
 			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
-						  use_mini_mask=self._config.USE_MINI_MASK)
+						  use_mini_mask=self._config.USE_MINI_MASK, mode=self._mode)
 
 		# For now I include images that have no instances. This can happen in cases
 		# where we train on 2D slices and a particular slice doesn't have any lesions. 
@@ -1396,7 +1411,10 @@ class Dataset(torch.utils.data.Dataset):
 		# Add to batch
 		rpn_match = rpn_match[:, np.newaxis]
 		
-		#image = mold_image(image.astype(np.float32), self._config)
+		# Mold the image if we're training (network expects molded images)
+		if self._mode == 'train' or self._mode == 'val':
+			print('MOLDING')
+			image = mold_image(image.astype(np.float32), self._config)
 	
 		# Convert
 		image = image.transpose(2, 0, 1).copy()
@@ -1609,7 +1627,7 @@ class MaskRCNN(nn.Module):
 			if detections.size and mrcnn_mask.size:
 				final_rois, final_class_ids, final_scores, final_masks =\
 					self.unmold_detections(detections[i], mrcnn_mask[i],
-									   	image.shape, windows[i])
+										image.shape, windows[i])
 			else:
 				final_rois, final_class_ids, final_scores, final_masks =\
 					np.array([]), np.array([]), np.array([]), np.array([])
@@ -1780,8 +1798,8 @@ class MaskRCNN(nn.Module):
 			layers = layer_regex[layers]
 
 	
-		train_set = Dataset(train_dataset, self.config, augment=True)
-		val_set = Dataset(val_dataset, self.config, augment=True)
+		train_set = Dataset(train_dataset, self.config, mode='train', augment=True)
+		val_set = Dataset(val_dataset, self.config, mode='val', augment=True)
 
 		train_generator = torch.utils.data.DataLoader(train_set, batch_size=1, 
 														shuffle=True, num_workers=4,
@@ -1993,13 +2011,86 @@ class MaskRCNN(nn.Module):
 			step += 1
 
 		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
-
+	'''
 	def evaluate_model(self, dataset, logs, nb_mc=10):
-		test_set = Dataset(dataset, self.config, augment=True)
+		test_set = Dataset(dataset, self.config, mode='test', augment=True)
 		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
 		result_list = []
-		for threshold in range(0, 101, 10):
+		fdr_list = []
+		tpr_list = []
+		th_list = []
+		#for threshold in range(0, 101, 10):
+		pred_stats = {'fdr': 0, 'tpr': 0, 'th': 0}
+		#threshold *= 0.01
+		#print('---- Threshold at {} ------'.format(threshold))
+		nb_images = 0
+		for inputs in test_generator:
+			images = inputs[0]
+			rpn_match = inputs[1]
+			rpn_bbox = inputs[2]
+			gt_class_ids = inputs[3]
+			gt_boxes = inputs[4]
+			gt_masks = inputs[5]
+			image_metas = inputs[6]
+
+			# Image_metas as numpy array
+			image_metas = image_metas.numpy()
+
+			# Wrap in variables
+			images = Variable(images, volatile=True)
+			rpn_match = Variable(rpn_match, volatile=True)
+			rpn_bbox = Variable(rpn_bbox, volatile=True)
+			gt_class_ids = Variable(gt_class_ids, volatile=True)
+			gt_boxes = Variable(gt_boxes, volatile=True)
+			gt_masks = Variable(gt_masks, volatile=True)
+
+			# To GPU
+			if self.config.GPU_COUNT:
+				images = images.cuda()
+				rpn_match = rpn_match.cuda()
+				rpn_bbox = rpn_bbox.cuda()
+				gt_class_ids = gt_class_ids.cuda()
+				gt_boxes = gt_boxes.cuda()
+				gt_masks = gt_masks.cuda()
+
+			# Run prediction and then evaluate results at several different threshold values.
+			detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
+			#pred_stats_ex = evaluate.cca_img_no_unc(images[0, 2], detections, gt_masks, thresh=threshold)
+			netseg = images[0, 2].data.cpu().numpy()
+			netseg = netseg.astype(np.int16)
+			target = gt_masks.data.cpu().numpy()
+			
+			# Filter lesion sizes so that netseg 
+			mask_target = np.zeros((target.shape[2], target.shape[3]))
+			for lesion in range(target.shape[1]):
+				mask_target += target[0, lesion]
+
+			fdr, tpr, th = roc_curve(mask_target.flatten(), netseg.flatten())
+			if not np.isnan(fdr).any() and not np.isnan(tpr).any():
+				print('fdr is :', fdr)
+				print('tpr is :', tpr)
+				fdr_list.extend(item for item in fdr) 
+				#if item not in fdr_list) 
+				tpr_list.extend(item for item in tpr) 
+				th_list.extend(item for item in th) 
+			#print('fdr is :', fdr_list)
+		pred_stats = {'fdr': sorted(fdr_list), 'tpr': sorted(tpr_list), 'th': sorted(th_list)}
+	
+
+		print('tpr : ', pred_stats['tpr'])
+		print('fdr : ', pred_stats['fdr'])
+		plt.plot(pred_stats['fdr'], pred_stats['tpr'])
+		
+		plt.show()
+	'''
+
+	def evaluate_model(self, dataset, logs, nb_mc=10):
+		test_set = Dataset(dataset, self.config, mode='test', augment=True)
+		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
+
+		result_list = []
+		for threshold in [0, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 1.0]:
 			pred_stats = {'ntp': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
 				'nfp': {'all': 0, 'small': 0, 'med': 0, 'large': 0},
 				'nfn': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
@@ -2007,41 +2098,24 @@ class MaskRCNN(nn.Module):
 				'tpr': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
 				'nles': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
 				'nles_gt': {'all': 0, 'small': 0, 'med': 0, 'large': 0}}
-			threshold *= 0.01
 			print('---- Threshold at {} ------'.format(threshold))
 			nb_images = 0
 			for inputs in test_generator:
-				images = inputs[0]
-				rpn_match = inputs[1]
-				rpn_bbox = inputs[2]
-				gt_class_ids = inputs[3]
-				gt_boxes = inputs[4]
-				gt_masks = inputs[5]
-				image_metas = inputs[6]
-
-				# Image_metas as numpy array
-				image_metas = image_metas.numpy()
+				netseg = inputs[0]
+				gt_masks = inputs[1]
 
 				# Wrap in variables
-				images = Variable(images, volatile=True)
-				rpn_match = Variable(rpn_match, volatile=True)
-				rpn_bbox = Variable(rpn_bbox, volatile=True)
-				gt_class_ids = Variable(gt_class_ids, volatile=True)
-				gt_boxes = Variable(gt_boxes, volatile=True)
+				netseg = Variable(netseg, volatile=True)
 				gt_masks = Variable(gt_masks, volatile=True)
 
 				# To GPU
 				if self.config.GPU_COUNT:
-					images = images.cuda()
-					rpn_match = rpn_match.cuda()
-					rpn_bbox = rpn_bbox.cuda()
-					gt_class_ids = gt_class_ids.cuda()
-					gt_boxes = gt_boxes.cuda()
+					netseg = netseg.cuda()
 					gt_masks = gt_masks.cuda()
 
 				# Run prediction and then evaluate results at several different threshold values.
-				detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
-				pred_stats_ex = evaluate.cca_img_no_unc(images[0, 2], detections, gt_masks, thresh=threshold)
+				#detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
+				pred_stats_ex = evaluate.cca_img_no_unc(netseg, gt_masks, thresh=threshold)
 				for dicts in pred_stats:
 					for idx in pred_stats[dicts]:
 						pred_stats[dicts][idx] += pred_stats_ex[dicts][idx]
@@ -2081,17 +2155,21 @@ class MaskRCNN(nn.Module):
 				elif bin_size == 'all':
 					all_tpr.append(pred['tpr'][bin_size])
 					all_fdr.append(pred['fdr'][bin_size])
-
+		
 		print('Small_tpr : ', small_tpr)
 		print('Small_fdr : ', small_fdr)
 		print('Large_tpr : ', large_tpr)
 		print('Large_fdr : ', large_fdr)
-		plt.plot(all_fdr, all_tpr)
-		plt.plot(small_fdr, small_tpr)
-		plt.plot(med_fdr, med_tpr)
-		plt.plot(large_fdr, large_tpr)
+		print('max fdr (should be 1 : ', max(large_fdr))
+		plt.plot(sorted(all_fdr), [x for _, x in sorted(zip(all_fdr, all_tpr))])
+		plt.plot(sorted(small_fdr), [x for _, x in sorted(zip(small_fdr, small_tpr))])
+		plt.plot(sorted(med_fdr), [x for _, x in sorted(zip(med_fdr, med_tpr))])
+		plt.plot(sorted(large_fdr), [x for _, x in sorted(zip(large_fdr, large_tpr))])
+		#plt.plot(sorted(all_fdr), sorted(all_tpr))
+		#plt.plot(sorted(small_fdr), sorted(small_tpr))
+		#plt.plot(sorted(med_fdr), sorted(med_tpr))
+		#plt.plot(sorted(large_fdr), sorted(large_tpr))
 		plt.show()
-
 
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected

@@ -48,6 +48,17 @@ def get_lesion_bin(nvox):
 	else:
 		return 'small'
 
+def get_box_lesion_bin(nvox):
+	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
+	if 3 <= nvox <= 16:
+		return 'small'
+	elif 16 <= nvox <= 40:
+		return 'med'
+	elif nvox >= 40:
+		return 'large'
+	else:
+		return 'small'
+
 def remove_tiny_les(lesion_image, nvox=2):
 	labels, nles = ndimage.label(lesion_image)
 	class_ids = np.zeros([nles, 1], dtype=np.int32)
@@ -137,6 +148,37 @@ def extract_bboxes(mask, dims, buf):
 	else:
 		return boxes.astype(np.int32)
 
+def compute_simple_iou(box, gt_box):
+	"""Calculates IoU of the given box with the array of the given boxes.
+	box: 1D vector [y1, x1, y2, x2]
+	boxes: [boxes_count, (y1, x1, y2, x2)]
+
+	Note: the areas are passed in rather than calculated here for
+		  efficency. Calculate once in the caller to avoid duplicate work.
+	"""
+	# Calculate intersection areas
+	y1 = np.maximum(box[0], gt_box[:, 0])
+	y2 = np.minimum(box[2], gt_box[:, 2])
+	x1 = np.maximum(box[1], gt_box[:, 1])
+	x2 = np.minimum(box[3], gt_box[:, 3])
+	intersection = np.maximum(x2 - x1, 0) * np.maximum(y2 - y1, 0)
+
+	# Compute predicted and ground truth box areas
+	box_area = (box[2] - box[0]) * (box[3] - box[1])
+	gt_box_area = (gt_box[2] - gt_box[0]) * (gt_box[3] - gt_box[1])
+
+	# Compute and return iou (where the union is the sum of the two boxes areas minus their
+	# intersection)
+	iou = intersection / float(box_area + gt_box_area - intersection)
+
+	return iou
+
+def get_area(box):
+	# Compute area
+	box_area = (box[2] - box[0]) * (box[3] - box[1])
+	return box_area
+
+
 def compute_2D_iou(box, boxes, box_area, boxes_area):
 	"""Calculates IoU of the given box with the array of the given boxes.
 	box: 1D vector [y1, x1, y2, x2, class_id]
@@ -224,7 +266,7 @@ class Dataset(object):
 		"""Load the specified image and return a [H,W] Numpy array.
 		"""
 		# CHANGE LATER: Update slice index
-		self._slice_idx = random.randint(20,45)
+		self._slice_idx = random.randint(22,40)
 
 		# Get indices
 		nb_mods = len(config.MODALITIES)
@@ -232,7 +274,7 @@ class Dataset(object):
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
 		t2, opts = nrrd.read(t2_file)
-		t2 = np.asarray(t2)[:,:,self._slice_idx]
+		#t2 = np.asarray(t2)[:,:,self._slice_idx]
 	 
 		return t2
 
@@ -247,7 +289,7 @@ class Dataset(object):
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
 
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
-		uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
+		#uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
 		return uncmcvar
 
 	def load_masks(self, image_id, dataset, config):
@@ -264,8 +306,8 @@ class Dataset(object):
 		gt_mask = np.asarray(gt_mask)
 		net_mask = np.asarray(net_mask)
 		
-		net_mask = net_mask[:,:,self._slice_idx]
-		gt_mask = gt_mask[:,:,self._slice_idx]
+		#net_mask = net_mask[:,:,self._slice_idx]
+		#gt_mask = gt_mask[:,:,self._slice_idx]
 
 		# Remove small lesions
 		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
@@ -274,12 +316,14 @@ class Dataset(object):
 		labels = {}
 		nles = {}
 		labels, nles = ndimage.label(gt_mask)
-		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+		#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
 		# Check if there are no lesions
 
 		if nles == 0:
-			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+			#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 			gt_masks[0] = gt_mask
 
 		# Look for all the voxels associated with a particular lesion
@@ -290,7 +334,8 @@ class Dataset(object):
 			gt_mask[labels == i] = 1
 			gt_masks[i-1] = gt_mask
 
-		gt_masks = gt_masks.transpose(1, 2, 0)
+		gt_masks = gt_masks.transpose(1, 2, 3, 0)
+		#gt_masks = gt_masks.transpose(1, 2, 0)
 
 		return net_mask, gt_masks, class_ids, nles
 

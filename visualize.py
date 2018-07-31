@@ -376,7 +376,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     ax: (optional) Matplotlib axis to draw on.
     """
     # Number of boxes
-    N = boxes.shape[0] if boxes is not None else 0
+    N = boxes.shape[0] if boxes is not None else masks.shape[0] if masks is not None else 0
 
     # Matplotlib Axis
     if not ax:
@@ -390,9 +390,9 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     masked_image = image * 255
     masked_image = masked_image.astype(np.uint32).copy()
 
-    if boxes is None:
-        ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
-        return ax
+    #if boxes is None:
+        #ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
+        #return ax
 
     # Generate random colors
     colors = random_colors(N, bright=False)
@@ -438,9 +438,10 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                           'pad': 1, 'edgecolor': 'none'})
 
         # Masks
-
+        print('Masks shape :', masks)
         if masks is not None:
-            mask = masks[:, :, i]
+            print('Masks shape :', masks.shape)
+            mask = masks[:, :]
             masked_image = apply_mask(masked_image, mask, color)
             # Mask Polygon
             # Pad to ensure proper polygons for masks that touch image edges.
@@ -451,7 +452,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             for verts in contours:
                 # Subtract the padding and flip (y, x) to (x, y)
                 verts = np.fliplr(verts) - 1
-                p = Polygon(verts, facecolor="none", edgecolor=color)
+                p = Polygon(verts, facecolor='r', edgecolor=color)
                 ax.add_patch(p)
 
     ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
@@ -555,8 +556,8 @@ class IndexTracker(object):
         self.ax[1][0].axis('off')
         self.ax[1][1].axis('off')
         fontdict = {'fontsize':10}
-        self.ax[0][0].set_title(r'Det-Net Output and T2 Image (confidence thresh=0.95)', fontdict)
-        self.ax[0][1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
+        self.ax[0][0].set_title(r'T2 Image with Ground Truth Mask', fontdict=fontdict)
+        self.ax[0][1].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
         self.ax[1][0].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
         self.ax[1][1].set_title(r'U-Net MC Sample Variance', fontdict=fontdict)
         self.W = W
@@ -619,7 +620,7 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         netseg_slice = netseg[:,:,idx]
         t2_slice = t2[:,:,idx]
         unc_slice = unc[:,:,idx]
-
+        print('target slice shape: ', target_slice.shape)
         # Stack slices to make the input image
         image_slice = np.stack([t2_slice, unc_slice, netseg_slice], axis = 0)
 
@@ -638,7 +639,8 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         # Generate bounding box slices
         if N != 0:
             assert N == masks.shape[-1] == class_ids.shape[0]
-            ax[0][0] = draw_boxes(t2_slice, boxes, captions=scores)
+            #ax[0][0] = draw_boxes(t2_slice, masks=target_slice, captions=scores)
+            ax[0][0] = draw_boxes(t2_slice, masks=target_slice)
         else:
             ax[0][0] = draw_boxes(t2_slice)       
 
@@ -661,6 +663,6 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     threshed = threshed * 255
     threshed = threshed.astype(np.uint32).copy()
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
- 
-    scroll_display(boxed_image, target, threshed, unc, figsize)
+
+    scroll_display(boxed_image, threshed, t2, threshed, figsize)
 
