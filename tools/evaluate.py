@@ -345,12 +345,21 @@ def cca_img_no_unc(netseg, target, thresh):
     mask_target = np.zeros((target.shape[2], target.shape[3], target.shape[4]))
     for lesion in range(target.shape[1]):
         mask_target += target[0, lesion]
+  
+    '''
+    #To Test netseg = gt_mask (should get ROC as tpr = 1 and fdr = 0 everywhere)
+    # We need to get the target in 192 * 192 * 64 format
+    nseg = np.zeros((target.shape[2], target.shape[3], target.shape[4]))
+    for lesion in range(netseg.shape[0]):
+        nseg += netseg[lesion]
+    netseg = nseg
+    '''
+
     target, _ = utils.remove_tiny_les(mask_target, nvox=2)
     #netseg = ndimage.binary_dilation(netseg, structure=ndimage.generate_binary_structure(3, 2))
     labels = {}
     nles = {}
     labels['target'], nles['target'] = ndimage.label(target)
-
     # Go through segmentation masks
     labels['netseg'], nles['netseg'] = ndimage.label(netseg)
     found_h = np.ones(nles['netseg'], np.int16)
@@ -366,6 +375,7 @@ def cca_img_no_unc(netseg, target, thresh):
         h_lesions = np.unique(labels['netseg'][labels['target'] == i])
         # All the voxels in this area contribute to detecting the lesion
         nb_overlap = netseg[labels['target'] == i].sum()
+        print('Overlap and size: ', nb_overlap, gt_lesion_size)
         nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
         if nb_overlap >= 3 or nb_overlap >= 0.5 * gt_lesion_size:
             ntp[utils.get_lesion_bin(gt_lesion_size)] += 1
@@ -384,7 +394,10 @@ def cca_img_no_unc(netseg, target, thresh):
     ntp['all'] = ntp['small'] + ntp['med'] + ntp['large']
     nfp['all'] = nfp['small'] + nfp['med'] + nfp['large']
     nfn['all'] = nfn['small'] + nfn['med'] + nfn['large']
-
+    print('Number tp : ', ntp)
+    print('Number fp : ', nfp)
+    print('Number les : ', nb_les)
+    print('Number les gt : ', nles_gt)
     tpr = {}
     fdr = {}
     for s in ntp.keys():
@@ -401,7 +414,8 @@ def cca_img_no_unc(netseg, target, thresh):
         else:
             ppv = 1
         fdr[s] = 1 - ppv
-
+    print('TPR : ', tpr)
+    print('FDR : ', fdr)
     return {'ntp': ntp, 'nfp': nfp, 'nfn': nfn, 'fdr': fdr, 'tpr': tpr, 'nles': nb_les, 'nles_gt': nles_gt}
 
 

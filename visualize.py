@@ -59,7 +59,7 @@ def random_colors(N, bright=True):
     convert to RGB.
     """
     brightness = 1.0 if bright else 0.8
-    hsv = [(0, 1, brightness) for i in range(N)]
+    hsv = [(0, 0.50, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     random.shuffle(colors)
     return colors
@@ -376,7 +376,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     ax: (optional) Matplotlib axis to draw on.
     """
     # Number of boxes
-    N = boxes.shape[0] if boxes is not None else masks.shape[0] if masks is not None else 0
+    N = boxes.shape[0] if boxes is not None else 0
 
     # Matplotlib Axis
     if not ax:
@@ -395,11 +395,11 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
         #return ax
 
     # Generate random colors
-    colors = random_colors(N, bright=False)
+    colors = random_colors(N, bright=True)
  
     for i in range(N):
         # Box visibility
-        visibility = visibilities[i] if visibilities is not None else 1
+        visibility = visibilities[i] if visibilities is not None else 2
         if visibility == 0:
             color = "gray"
             style = "dotted"
@@ -421,9 +421,8 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             y1, x1, y2, x2 = boxes[i]
             p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
                                   alpha=alpha, linestyle=style,
-                                  edgecolor=color, facecolor='none')
+                                  edgecolor='r', facecolor='none')
             ax.add_patch(p)
-
         # Captions
         if captions is not None:
             caption = captions[i]
@@ -438,9 +437,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                           'pad': 1, 'edgecolor': 'none'})
 
         # Masks
-        print('Masks shape :', masks)
         if masks is not None:
-            print('Masks shape :', masks.shape)
             mask = masks[:, :]
             masked_image = apply_mask(masked_image, mask, color)
             # Mask Polygon
@@ -452,7 +449,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             for verts in contours:
                 # Subtract the padding and flip (y, x) to (x, y)
                 verts = np.fliplr(verts) - 1
-                p = Polygon(verts, facecolor='r', edgecolor=color)
+                p = Polygon(verts, facecolor=color, edgecolor=color)
                 ax.add_patch(p)
 
     ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
@@ -556,8 +553,8 @@ class IndexTracker(object):
         self.ax[1][0].axis('off')
         self.ax[1][1].axis('off')
         fontdict = {'fontsize':10}
-        self.ax[0][0].set_title(r'T2 Image with Ground Truth Mask', fontdict=fontdict)
-        self.ax[0][1].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
+        self.ax[0][0].set_title(r'Det-Net Output and T2 Image (confidence thresh = 0.95)', fontdict=fontdict)
+        self.ax[0][1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
         self.ax[1][0].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
         self.ax[1][1].set_title(r'U-Net MC Sample Variance', fontdict=fontdict)
         self.W = W
@@ -616,11 +613,10 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     ax[1][0].axis('off')
     ax[1][1].axis('off')
     for idx in range(depth):
-        target_slice, _ = utils.remove_tiny_les(target[:,:,idx])
+        target_slice = target[:,:,idx]
         netseg_slice = netseg[:,:,idx]
         t2_slice = t2[:,:,idx]
         unc_slice = unc[:,:,idx]
-        print('target slice shape: ', target_slice.shape)
         # Stack slices to make the input image
         image_slice = np.stack([t2_slice, unc_slice, netseg_slice], axis = 0)
 
@@ -639,8 +635,8 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         # Generate bounding box slices
         if N != 0:
             assert N == masks.shape[-1] == class_ids.shape[0]
-            #ax[0][0] = draw_boxes(t2_slice, masks=target_slice, captions=scores)
-            ax[0][0] = draw_boxes(t2_slice, masks=target_slice)
+            ax[0][0] = draw_boxes(t2_slice, boxes=boxes, captions=scores)
+            #ax[0][0] = draw_boxes(t2_slice, masks=target_slice)
         else:
             ax[0][0] = draw_boxes(t2_slice)       
 
@@ -664,5 +660,5 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     threshed = threshed.astype(np.uint32).copy()
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
 
-    scroll_display(boxed_image, threshed, t2, threshed, figsize)
+    scroll_display(boxed_image, target, threshed, unc, figsize)
 

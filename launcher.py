@@ -103,7 +103,7 @@ class MSDataset(utils.Dataset):
 		elif self._mode == 'val':
 			self._image_ids = self._image_ids[train_idx:valid_idx]
 		elif self._mode == 'test':
-			self._image_ids = self._image_ids[valid_idx:]
+			self._image_ids = self._image_ids[valid_idx:valid_idx + 32]
 
 		# Build (or rebuild) everything else from the info dicts.
 		self.num_images = int(len(self._image_ids) / 8)

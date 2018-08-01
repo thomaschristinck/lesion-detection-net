@@ -2011,86 +2011,15 @@ class MaskRCNN(nn.Module):
 			step += 1
 
 		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
-	'''
-	def evaluate_model(self, dataset, logs, nb_mc=10):
-		test_set = Dataset(dataset, self.config, mode='test', augment=True)
-		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
-
-		result_list = []
-		fdr_list = []
-		tpr_list = []
-		th_list = []
-		#for threshold in range(0, 101, 10):
-		pred_stats = {'fdr': 0, 'tpr': 0, 'th': 0}
-		#threshold *= 0.01
-		#print('---- Threshold at {} ------'.format(threshold))
-		nb_images = 0
-		for inputs in test_generator:
-			images = inputs[0]
-			rpn_match = inputs[1]
-			rpn_bbox = inputs[2]
-			gt_class_ids = inputs[3]
-			gt_boxes = inputs[4]
-			gt_masks = inputs[5]
-			image_metas = inputs[6]
-
-			# Image_metas as numpy array
-			image_metas = image_metas.numpy()
-
-			# Wrap in variables
-			images = Variable(images, volatile=True)
-			rpn_match = Variable(rpn_match, volatile=True)
-			rpn_bbox = Variable(rpn_bbox, volatile=True)
-			gt_class_ids = Variable(gt_class_ids, volatile=True)
-			gt_boxes = Variable(gt_boxes, volatile=True)
-			gt_masks = Variable(gt_masks, volatile=True)
-
-			# To GPU
-			if self.config.GPU_COUNT:
-				images = images.cuda()
-				rpn_match = rpn_match.cuda()
-				rpn_bbox = rpn_bbox.cuda()
-				gt_class_ids = gt_class_ids.cuda()
-				gt_boxes = gt_boxes.cuda()
-				gt_masks = gt_masks.cuda()
-
-			# Run prediction and then evaluate results at several different threshold values.
-			detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
-			#pred_stats_ex = evaluate.cca_img_no_unc(images[0, 2], detections, gt_masks, thresh=threshold)
-			netseg = images[0, 2].data.cpu().numpy()
-			netseg = netseg.astype(np.int16)
-			target = gt_masks.data.cpu().numpy()
-			
-			# Filter lesion sizes so that netseg 
-			mask_target = np.zeros((target.shape[2], target.shape[3]))
-			for lesion in range(target.shape[1]):
-				mask_target += target[0, lesion]
-
-			fdr, tpr, th = roc_curve(mask_target.flatten(), netseg.flatten())
-			if not np.isnan(fdr).any() and not np.isnan(tpr).any():
-				print('fdr is :', fdr)
-				print('tpr is :', tpr)
-				fdr_list.extend(item for item in fdr) 
-				#if item not in fdr_list) 
-				tpr_list.extend(item for item in tpr) 
-				th_list.extend(item for item in th) 
-			#print('fdr is :', fdr_list)
-		pred_stats = {'fdr': sorted(fdr_list), 'tpr': sorted(tpr_list), 'th': sorted(th_list)}
-	
-
-		print('tpr : ', pred_stats['tpr'])
-		print('fdr : ', pred_stats['fdr'])
-		plt.plot(pred_stats['fdr'], pred_stats['tpr'])
-		
-		plt.show()
-	'''
 
 	def evaluate_model(self, dataset, logs, nb_mc=10):
 		test_set = Dataset(dataset, self.config, mode='test', augment=True)
 		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
 		result_list = []
-		for threshold in [0, 0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 1.0]:
+		#for threshold in [0.2]:
+		for threshold in [0.1111, 0.111, 0.1, 0.2, 0.3, 0.7, 0.8, 0.9, 0.999, 1.0]:
+		#for threshold in [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 1.0]:
 			pred_stats = {'ntp': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
 				'nfp': {'all': 0, 'small': 0, 'med': 0, 'large': 0},
 				'nfn': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
@@ -2126,6 +2055,10 @@ class MaskRCNN(nn.Module):
 			for dicts in pred_stats:
 				for idx in pred_stats[dicts]:
 					pred_stats[dicts][idx] /= nb_images
+			print('Pred fdr : ', pred_stats['fdr'])
+			print('Pred tpr : ', pred_stats['tpr'])
+			print('Number of gt les : ', pred_stats['nles_gt'])
+			print('Number of les : ', pred_stats['nles'])
 			result_list.append(pred_stats)
 		# Now plot the items of interest (TPR / FPR)
 		x =[]
@@ -2156,24 +2089,36 @@ class MaskRCNN(nn.Module):
 					all_tpr.append(pred['tpr'][bin_size])
 					all_fdr.append(pred['fdr'][bin_size])
 		
+		'''
 		print('Small_tpr : ', small_tpr)
 		print('Small_fdr : ', small_fdr)
 		print('Large_tpr : ', large_tpr)
 		print('Large_fdr : ', large_fdr)
-		print('max fdr (should be 1 : ', max(large_fdr))
-		plt.plot(sorted(all_fdr), [x for _, x in sorted(zip(all_fdr, all_tpr))])
-		plt.plot(sorted(small_fdr), [x for _, x in sorted(zip(small_fdr, small_tpr))])
-		plt.plot(sorted(med_fdr), [x for _, x in sorted(zip(med_fdr, med_tpr))])
-		plt.plot(sorted(large_fdr), [x for _, x in sorted(zip(large_fdr, large_tpr))])
-		#plt.plot(sorted(all_fdr), sorted(all_tpr))
-		#plt.plot(sorted(small_fdr), sorted(small_tpr))
-		#plt.plot(sorted(med_fdr), sorted(med_tpr))
-		#plt.plot(sorted(large_fdr), sorted(large_tpr))
+		print(small_fdr)
+		print(small_tpr)
+		'''
+
+		print('Small_tpr : ', small_tpr)
+		print('Small_fdr : ', small_fdr)
+		print('Large_tpr : ', large_tpr)
+		print('Large_fdr : ', large_fdr)
+
+		#plt.plot(sorted(all_fdr), [x for _, x in sorted(zip(all_fdr, all_tpr))])
+
+		# Here I sort fdr's in order and keep them matched with the corresponding tpr - pretty sure
+		# there is no bug here
+		plt.plot(sorted(small_fdr), [x for _, x in sorted(zip(small_fdr, small_tpr))], label='small')
+		plt.plot(sorted(med_fdr), [x for _, x in sorted(zip(med_fdr, med_tpr))], label='medium')
+		plt.plot(sorted(large_fdr), [x for _, x in sorted(zip(large_fdr, large_tpr))], label='large')
+		plt.legend(loc=3)
+		plt.ylabel('True Positive Rate')
+		plt.xlabel('False Detection Rate')
+		plt.title('Uncertainty U-Net ROC')
 		plt.show()
 
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
-		as an input to the neural network.
+		as an input to the network.
 		images: List of image matricies [height,width,depth]. Images can have
 			different sizes.
 
