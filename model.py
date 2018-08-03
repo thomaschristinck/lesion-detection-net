@@ -2015,6 +2015,103 @@ class MaskRCNN(nn.Module):
 	def evaluate_model(self, dataset, logs, nb_mc=10):
 		test_set = Dataset(dataset, self.config, mode='test', augment=True)
 		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
+		  ####### NAZ's CODE ############################################
+
+		nb_img_valid = len(dataset._image_ids) # NEED TO CHANGE THIS LINE, NOT SURE HOW TO GET THE TOTAL NUMBER OF IMAGES FROM YOUR test_generator
+		print('nb_img_valid is ', len(test_generator))
+		thresholds = [0.2]
+		nb_thrs = len(thresholds)
+		fpr = np.empty((nb_img_valid, nb_thrs))
+		tpr = np.empty((nb_img_valid, nb_thrs))
+		fdr = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions_s = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions_s = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions_m = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions_m = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+
+		i = 0
+		for inputs in test_generator:
+			netseg = inputs[0]
+			gt_masks = inputs[1]
+			netseg = netseg.numpy()
+			gt_masks = gt_masks.numpy()
+			print("{}-th brain...".format(i+1))
+			y_true = gt_masks
+			y_pred = netseg
+			print('Netsge sum : ', np.sum(netseg))
+			print('target sum : ', np.sum(gt_masks))
+			for j, thr in enumerate(thresholds):
+				#y_pred_3d = np.reshape(y_pred, self.output_shape)[...,0] # NOT  SURE WHAT FORMAT YOUR NETWORK OUTPUT IS, IF IT IS 3D IGNORE THESE TWO LINES 
+				#y_true_3d = np.reshape(y_true, self.output_shape)[...,0] # IF YOU FLATTEN THE OUTPUT OF THE NETWORK YOU NEED TO CONVERT IT TO 3D HERE
+				
+				y_pred_3d = netseg 
+				y_true_3d = gt_masks
+
+				import copy
+				
+				a = copy.copy(y_pred_3d)
+				b = copy.copy(y_true_3d)
+
+				lesion_stats = evaluate.count_lesions(netseg=a.astype(np.float32), target=b.astype(np.int16), thresh=thr)
+	  
+				tpr_lesions[i, j] = lesion_stats['tpr']['all']
+				fdr_lesions[i, j] = lesion_stats['fdr']['all']
+				
+				tpr_lesions_s[i, j] = lesion_stats['tpr']['small']
+				fdr_lesions_s[i, j] = lesion_stats['fdr']['small']
+				
+				tpr_lesions_m[i, j] = lesion_stats['tpr']['med']
+				fdr_lesions_m[i, j] = lesion_stats['fdr']['med']
+				
+				tpr_lesions_l[i, j] = lesion_stats['tpr']['large']
+				fdr_lesions_l[i, j] = lesion_stats['fdr']['large']
+			
+			i +=1
+
+			print("\n tpr-lesion:", np.mean(tpr_lesions, axis=0))
+			print("\n fdr-lesion:", np.mean(fdr_lesions, axis=0))
+		
+		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
+		tpr_lesions_mean = np.mean(tpr_lesions, axis=0)
+		
+		fdr_lesions_mean_s = np.mean(fdr_lesions_s, axis=0)
+		tpr_lesions_mean_s = np.mean(tpr_lesions_s, axis=0)
+
+		fdr_lesions_mean_m = np.mean(fdr_lesions_m, axis=0)
+		tpr_lesions_mean_m = np.mean(tpr_lesions_m, axis=0)
+
+		fdr_lesions_mean_l = np.mean(fdr_lesions_l, axis=0)
+		tpr_lesions_mean_l = np.mean(tpr_lesions_l, axis=0)
+
+		fig = plt.figure()
+		ax = fig.add_subplot(1, 1, 1) 
+		plt.plot(fdr_lesions_mean, tpr_lesions_mean, label='lesion level-all')
+		plt.plot(fdr_lesions_mean_s, tpr_lesions_mean_s, label='lesion level-small')
+		plt.plot(fdr_lesions_mean_m, tpr_lesions_mean_m, label='lesion level-med')
+		plt.plot(fdr_lesions_mean_l, tpr_lesions_mean_l, label='lesion level-large') 
+		plt.legend(loc="lower right")
+		plt.xlabel('fdr')
+		plt.ylabel('tpr')
+		plt.title('Uncertainty U-Net ROC')
+		major_ticks = np.arange(0, 1, 0.1)
+		minor_ticks = np.arange(0, 1, 0.02)
+		ax.set_xticks(major_ticks)
+		ax.set_xticks(minor_ticks, minor=True)
+		ax.set_yticks(major_ticks)
+		ax.set_yticks(minor_ticks, minor=True)
+		ax.grid(which='both')
+		ax.grid(which='minor', alpha=0.2)
+		ax.grid(which='major', alpha=0.5)
+		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve.png")) ## NEED TO CHANGE THIS LINE, SAVE THE FIGURE WHEREVER YOU WANT
+		
+	'''	
+	def evaluate_model(self, dataset, logs, nb_mc=10):
+		test_set = Dataset(dataset, self.config, mode='test', augment=True)
+		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
 		result_list = []
 		#for threshold in [0.2]:
@@ -2088,15 +2185,14 @@ class MaskRCNN(nn.Module):
 				elif bin_size == 'all':
 					all_tpr.append(pred['tpr'][bin_size])
 					all_fdr.append(pred['fdr'][bin_size])
-		
-		'''
-		print('Small_tpr : ', small_tpr)
-		print('Small_fdr : ', small_fdr)
-		print('Large_tpr : ', large_tpr)
-		print('Large_fdr : ', large_fdr)
-		print(small_fdr)
-		print(small_tpr)
-		'''
+
+		#print('Small_tpr : ', small_tpr)
+		#print('Small_fdr : ', small_fdr)
+		#print('Large_tpr : ', large_tpr)
+		#print('Large_fdr : ', large_fdr)
+		##print(small_fdr)
+		#print(small_tpr)
+		#
 
 		print('Small_tpr : ', small_tpr)
 		print('Small_fdr : ', small_fdr)
@@ -2115,7 +2211,7 @@ class MaskRCNN(nn.Module):
 		plt.xlabel('False Detection Rate')
 		plt.title('Uncertainty U-Net ROC')
 		plt.show()
-
+	'''
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
 		as an input to the network.

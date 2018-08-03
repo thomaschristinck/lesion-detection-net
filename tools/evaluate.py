@@ -325,7 +325,7 @@ def cca_img(netseg, gt, u, uth, metric):
 
     return {'ntp': ntp, 'nfp': nfp, 'nfn': nfn, 'fdr': fdr, 'tpr': tpr, 'nles': nb_les, 'nles_gt': nles_gt}
 
-def cca_img_no_unc(netseg, target, thresh):
+def count_lesions(netseg, target, thresh):
     """
     Connected component analysis of between prediction `h` and ground truth `t` across lesion bin sizes.
     :param h: network output on range [0,1], shape=(NxMxO)
@@ -336,15 +336,15 @@ def cca_img_no_unc(netseg, target, thresh):
     :type th: float16, float32, float64
     :return: dict
     """
-    netseg = netseg.data.cpu().numpy()
+
     netseg[netseg >= thresh] = 1
     netseg[netseg < thresh] = 0
-    netseg = netseg.astype(np.int16)
     netseg = netseg[0]
-    target = target.data.cpu().numpy()
-    mask_target = np.zeros((target.shape[2], target.shape[3], target.shape[4]))
-    for lesion in range(target.shape[1]):
-        mask_target += target[0, lesion]
+    target = target[0]
+   
+    mask_target = np.zeros((target.shape[1], target.shape[2], target.shape[3]))
+    for lesion in range(target.shape[0]):
+        mask_target += target[lesion]
   
     '''
     #To Test netseg = gt_mask (should get ROC as tpr = 1 and fdr = 0 everywhere)
@@ -354,7 +354,6 @@ def cca_img_no_unc(netseg, target, thresh):
         nseg += netseg[lesion]
     netseg = nseg
     '''
-
     target, _ = utils.remove_tiny_les(mask_target, nvox=2)
     #netseg = ndimage.binary_dilation(netseg, structure=ndimage.generate_binary_structure(3, 2))
     labels = {}
@@ -375,7 +374,6 @@ def cca_img_no_unc(netseg, target, thresh):
         h_lesions = np.unique(labels['netseg'][labels['target'] == i])
         # All the voxels in this area contribute to detecting the lesion
         nb_overlap = netseg[labels['target'] == i].sum()
-        print('Overlap and size: ', nb_overlap, gt_lesion_size)
         nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
         if nb_overlap >= 3 or nb_overlap >= 0.5 * gt_lesion_size:
             ntp[utils.get_lesion_bin(gt_lesion_size)] += 1
@@ -394,10 +392,10 @@ def cca_img_no_unc(netseg, target, thresh):
     ntp['all'] = ntp['small'] + ntp['med'] + ntp['large']
     nfp['all'] = nfp['small'] + nfp['med'] + nfp['large']
     nfn['all'] = nfn['small'] + nfn['med'] + nfn['large']
-    print('Number tp : ', ntp)
-    print('Number fp : ', nfp)
-    print('Number les : ', nb_les)
-    print('Number les gt : ', nles_gt)
+    #print('Number tp : ', ntp)
+    #print('Number fp : ', nfp)
+    #print('Number les : ', nb_les)
+    #print('Number les gt : ', nles_gt)
     tpr = {}
     fdr = {}
     for s in ntp.keys():
@@ -414,8 +412,8 @@ def cca_img_no_unc(netseg, target, thresh):
         else:
             ppv = 1
         fdr[s] = 1 - ppv
-    print('TPR : ', tpr)
-    print('FDR : ', fdr)
+    #print('TPR : ', tpr)
+    #print('FDR : ', fdr)
     return {'ntp': ntp, 'nfp': nfp, 'nfn': nfn, 'fdr': fdr, 'tpr': tpr, 'nles': nb_les, 'nles_gt': nles_gt}
 
 

@@ -14,6 +14,7 @@ import colorsys
 import numpy as np
 import imageio
 from skimage.measure import find_contours
+from scipy import ndimage
 import matplotlib.pyplot as plt
 if "DISPLAY" not in os.environ:
     plt.switch_backend('agg')
@@ -59,7 +60,7 @@ def random_colors(N, bright=True):
     convert to RGB.
     """
     brightness = 1.0 if bright else 0.8
-    hsv = [(0, 0.50, brightness) for i in range(N)]
+    hsv = [(0.88, 0.67, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     random.shuffle(colors)
     return colors
@@ -306,64 +307,95 @@ def display_top_masks(image, mask, class_ids, class_names, limit=4):
         titles.append(class_names[class_id] if class_id != -1 else "-")
     display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
 
+def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
+    """Draw bounding boxes and segmentation masks with differnt
+    customizations.
 
-def plot_precision_recall(AP, precisions, recalls):
-    """Draw the precision-recall curve.
-
-    AP: Average precision at IoU >= 0.5
-    precisions: list of precision values
-    recalls: list of recall values
+    boxes: [N, (y1, x1, y2, x2, class_id)] in image coordinates.
+    masks: [N, height, width]
+    captions: List of N titles to display on each box
+    visibilities: (optional) List of values of 0, 1, or 2. Determine how
+        prominant each bounding box should be.
+    title: An optional title to show over the image
+    ax: (optional) Matplotlib axis to draw on.
     """
-    # Plot the Precision-Recall curve
-    _, ax = plt.subplots(1)
-    ax.set_title("Precision-Recall Curve. AP@50 = {:.3f}".format(AP))
-    ax.set_ylim(0, 1.1)
-    ax.set_xlim(0, 1.1)
-    _ = ax.plot(recalls, precisions)
+    # Number of boxes
+    max_intersect = 0
+    for i in range(1, gt_nles + 1):
+        # Go through each lesion and see if max intersect is > 0.5 * lesion size, or > 3 voxels
+        # if it is, the instance mask is green (TP), otherwise, it is blue (undetected FN).
+        lesion_size = np.sum(gt_masks[gt_labels == i])
+        intersect = mask[gt_labels == 1].sum()
+        if intersect >= 3 or intersect >= 0.5 * lesion_size:
+            max_intersect = intersect
 
+    N=2
+    if max_intersect != 0:
+        # Color mask green; it is a true positive
+        hsv = [(0.42, 0.67, 1.0) for i in range(N)]
+        colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+        color = colors[0]
+        return color, i
 
-def plot_overlaps(gt_class_ids, pred_class_ids, pred_scores,
-                  overlaps, class_names, threshold=0.5):
-    """Draw a grid showing how ground truth objects are classified.
-    gt_class_ids: [N] int. Ground truth class IDs
-    pred_class_id: [N] int. Predicted class IDs
-    pred_scores: [N] float. The probability scores of predicted classes
-    overlaps: [pred_boxes, gt_boxes] IoU overlaps of predictins and GT boxes.
-    class_names: list of all class names in the dataset
-    threshold: Float. The prediction probability required to predict a class
-    """
-    gt_class_ids = gt_class_ids[gt_class_ids != 0]
-    pred_class_ids = pred_class_ids[pred_class_ids != 0]
+    else:
+        # Color mask red; it is a false positive
+        hsv = [(0.02, 0.67, 1.0) for i in range(N)]
+        colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+        color = colors[0]
+        return color, None
 
-    plt.figure(figsize=(12, 10))
-    plt.imshow(overlaps, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.yticks(np.arange(len(pred_class_ids)),
-               ["{} ({:.2f})".format(class_names[int(id)], pred_scores[i])
-                for i, id in enumerate(pred_class_ids)])
-    plt.xticks(np.arange(len(gt_class_ids)),
-               [class_names[int(id)] for id in gt_class_ids], rotation=90)
+def get_box_color(box, masks):
+    y1, x1, y2, x2 = box
+    box_matrix = np.zeros((masks.shape[0], masks.shape[1]))
+    box_matrix[y1:y2, x1:x2,] = 1
+    box_size = np.sum(box_matrix)
+    print('box size, mask sum :', box_size, np.sum(masks))
+    intersect = np.sum(box_matrix * masks)
+    print('intersect: ', intersect )
 
-    thresh = overlaps.max() / 2.
-    for i, j in itertools.product(range(overlaps.shape[0]),
-                                  range(overlaps.shape[1])):
-        text = ""
-        if overlaps[i, j] > threshold:
-            text = "match" if gt_class_ids[j] == pred_class_ids[i] else "wrong"
-        color = ("white" if overlaps[i, j] > thresh
-                 else "black" if overlaps[i, j] > 0
-                 else "grey")
-        plt.text(j, i, "{:.3f}\n{}".format(overlaps[i, j], text),
-                 horizontalalignment="center", verticalalignment="center",
-                 fontsize=9, color=color)
+    # Now for the union, figure out which lesion is contributing to intersect, then 
+    # union is the sum of the lesion size plus box size - minus the intersect
+    labels, nles = ndimage.label(masks)
+    max_intersect = 0
+    max_size = 0
+    for i in range(1, nles + 1):
+        
+        masks[labels != i] = 0
+        masks[labels == i] = 1
+ 
+        # Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
+        lesion_size = np.sum(masks[labels == i])
+        lesion_intersect = np.sum(masks * box_matrix)
+        if lesion_intersect > max_intersect:
+            lesion_choice = i
+            max_intersect = lesion_intersect
+            max_size = lesion_size
+       
+    
+    # Then IoU:
+    print('Intersect: ', intersect)
+    union = box_size + max_size - intersect
+    print('Union: ', union)
+    iou = intersect / union
 
-    plt.tight_layout()
-    plt.xlabel("Ground Truth")
-    plt.ylabel("Predictions")
+    # Reset mask
+    for i in range(1, nles + 1):
+        masks[labels == i] = 1
 
+    labels, nles2 = ndimage.label(masks)
+    if intersect != 0:
+        print('ya')
+        # True positive
+        color = 'g'
+    else:
+        # False negative
+        color = 'r'
+    
+    return color
 
 def draw_boxes(image, boxes=None, refined_boxes=None,
-               masks=None, captions=None, visibilities=None,
-               title="", ax=None):
+               mask=None, gt_mask=None, captions=None, visibilities=None,
+               title="", ax=None, pn_labels=False):
     """Draw bounding boxes and segmentation masks with differnt
     customizations.
 
@@ -419,9 +451,19 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                 # Skip this instance. Has no bbox. Likely lost in cropping.
                 continue
             y1, x1, y2, x2 = boxes[i]
-            p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+
+            # Get bounding box edge color based on IoU
+            if pn_labels:
+                bx_color = get_box_color([y1,x1,y2,x2], gt_mask)
+
+                p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+                                  alpha=alpha, linestyle=style,
+                                  edgecolor=bx_color, facecolor='none')
+            else:
+                 p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
                                   alpha=alpha, linestyle=style,
                                   edgecolor='r', facecolor='none')
+
             ax.add_patch(p)
         # Captions
         if captions is not None:
@@ -436,24 +478,59 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                     bbox={'facecolor': color, 'alpha': 0.4,
                           'pad': 1, 'edgecolor': 'none'})
 
-        # Masks
-        if masks is not None:
-            mask = masks[:, :]
-            masked_image = apply_mask(masked_image, mask, color)
-            # Mask Polygon
-            # Pad to ensure proper polygons for masks that touch image edges.
-            padded_mask = np.zeros(
-                (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
-            padded_mask[1:-1, 1:-1] = mask
-            contours = find_contours(padded_mask, 0.5)
-            for verts in contours:
-                # Subtract the padding and flip (y, x) to (x, y)
-                verts = np.fliplr(verts) - 1
-                p = Polygon(verts, facecolor=color, edgecolor=color)
-                ax.add_patch(p)
+    # Masks
+    if mask is not None and pn_labels == False:
+        print('Mask shape: ', mask.shape)
+        masked_image = apply_mask(masked_image, mask, color)
+        # Mask Polygon
+        # Pad to ensure proper polygons for masks that touch image edges.
+        padded_mask = np.zeros(
+            (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
+        padded_mask[1:-1, 1:-1] = mask
+        contours = find_contours(padded_mask, 0.5)
+        for verts in contours:
+            # Subtract the padding and flip (y, x) to (x, y)
+            verts = np.fliplr(verts) - 1
+            p = Polygon(verts, facecolor=color, edgecolor=color)
+            ax.add_patch(p)
+
+    elif mask is not None and pn_labels == True:
+            # Return a mask for each lesion instance
+            gt_labels, gt_nles = ndimage.label(gt_mask)
+            labels, nles = ndimage.label(mask)
+            print('Nles 1 : ', nles)
+            masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+
+            # Check if there are no lesions
+
+            if nles == 0:
+                masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+                masks[0] = mask
+
+            # Look for all the voxels associated with a particular lesion
+
+            for i in range(1, nles + 1):
+                mask[labels != i] = 0
+                mask[labels == i] = 1
+                masks[i-1] = mask
+            gt_idx_list = []
+            for i in range(masks.shape[0]):
+                color, gt_idx = get_mask_color(masks[i], gt_mask, gt_labels, gt_nles)
+                gt_idx_list.append(gt_idx)
+                masked_image = apply_mask(masked_image, masks[i], color)
+                # Mask Polygon
+                # Pad to ensure proper polygons for masks that touch image edges.
+                padded_mask = np.zeros(
+                    (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
+                padded_mask[1:-1, 1:-1] = mask
+                contours = find_contours(padded_mask, 0.5)
+                for verts in contours:
+                    # Subtract the padding and flip (y, x) to (x, y)
+                    verts = np.fliplr(verts) - 1
+                    p = Polygon(verts, facecolor=color, edgecolor=color)
+                    ax.add_patch(p)
 
     ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray_r)
-   
     return ax
 
 def plot_loss(loss, val_loss, save=True, log_dir=None):
@@ -553,7 +630,7 @@ class IndexTracker(object):
         self.ax[1][0].axis('off')
         self.ax[1][1].axis('off')
         fontdict = {'fontsize':10}
-        self.ax[0][0].set_title(r'Det-Net Output and T2 Image (confidence thresh = 0.95)', fontdict=fontdict)
+        self.ax[0][0].set_title(r'Det-Net Output, GT Mask, and T2 Image (confidence thresh = 0.95)', fontdict=fontdict)
         self.ax[0][1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
         self.ax[1][0].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
         self.ax[1][1].set_title(r'U-Net MC Sample Variance', fontdict=fontdict)
@@ -565,8 +642,8 @@ class IndexTracker(object):
         self.ind = self.slices//2
         self.im1 = ax[0][0].imshow(self.X[:,:, self.ind,:])
         self.im2 = ax[0][1].imshow(self.Y[:,:, self.ind], cmap=plt.cm.gray_r)
-        self.im3 = ax[1][0].imshow(self.Z[:,:, self.ind], cmap=plt.cm.gray_r)
-        self.im4 = ax[1][1].imshow(self.W[:,:, self.ind], cmap=plt.cm.pink_r)
+        self.im3 = ax[1][0].imshow(self.Z[:,:, self.ind], cmap=plt.cm.afmhot_r)
+        self.im4 = ax[1][1].imshow(self.W[:,:, self.ind], cmap=plt.cm.afmhot_r)
         self.update()
 
     def onscroll(self, event):
@@ -614,9 +691,11 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     ax[1][1].axis('off')
     for idx in range(depth):
         target_slice = target[:,:,idx]
+        threshed_slice = threshed[:,:,idx]
         netseg_slice = netseg[:,:,idx]
         t2_slice = t2[:,:,idx]
         unc_slice = unc[:,:,idx]
+        
         # Stack slices to make the input image
         image_slice = np.stack([t2_slice, unc_slice, netseg_slice], axis = 0)
 
@@ -635,8 +714,8 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         # Generate bounding box slices
         if N != 0:
             assert N == masks.shape[-1] == class_ids.shape[0]
-            ax[0][0] = draw_boxes(t2_slice, boxes=boxes, captions=scores)
-            #ax[0][0] = draw_boxes(t2_slice, masks=target_slice)
+            ax[0][0] = draw_boxes(t2_slice, boxes=boxes, mask=threshed_slice, gt_mask=target_slice, pn_labels=True)
+            #ax[0][0] = draw_boxes(t2_slice, boxes=boxes, captions=scores)
         else:
             ax[0][0] = draw_boxes(t2_slice)       
 
@@ -659,6 +738,13 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     threshed = threshed * 255
     threshed = threshed.astype(np.uint32).copy()
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
+
+    boxed_image = np.rot90(boxed_image, axes=(0,1))
+    target = np.rot90(target, axes=(0,1))
+    netseg = np.rot90(netseg, axes=(0,1))
+    unc = np.rot90(unc, axes=(0,1))
+    threshed = np.rot90(threshed, axes=(0,1))
+    t2 = np.rot90(t2, axes=(0,1))
 
     scroll_display(boxed_image, target, threshed, unc, figsize)
 

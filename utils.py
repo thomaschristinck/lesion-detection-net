@@ -270,7 +270,7 @@ class Dataset(object):
 
 		# Get indices
 		nb_mods = len(config.MODALITIES)
-		t2_idx = int((image_id // nb_mods) * nb_mods + 2)
+		t2_idx = int((image_id) * nb_mods + 2)
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
 		t2, opts = nrrd.read(t2_file)
@@ -285,7 +285,7 @@ class Dataset(object):
 		nb_mods = len(config.MODALITIES)
 
 		# Offset is 4 for entropy, 5 for MC variance, 6 for mutual information, 7 for predictive prog
-		uncmcvar_idx = int((image_id // nb_mods) * nb_mods + 5)
+		uncmcvar_idx = int((image_id) * nb_mods + 5)
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
 
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
@@ -297,8 +297,8 @@ class Dataset(object):
 		"""
 		# Get indices
 		nb_mods = len(config.MODALITIES)
-		net_mask_idx = int((image_id // nb_mods) * nb_mods + 1)
-		gt_mask_idx = int((image_id // nb_mods) * nb_mods + 3)
+		net_mask_idx = int((image_id) * nb_mods + 1)
+		gt_mask_idx = int((image_id) * nb_mods + 3)
 		net_mask_file = join(dataset._dir, dataset._image_list[net_mask_idx])
 		gt_mask_file = join(dataset._dir, dataset._image_list[gt_mask_idx])
 		net_mask, opts = nrrd.read(net_mask_file)
