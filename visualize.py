@@ -2,6 +2,7 @@
 Mask R-CNN
 Display and Visualization Functions.
 
+Plot loss function and random colors generator are from Matterport Mask R-CNN:
 Copyright (c) 2017 Matterport, Inc.
 Licensed under the MIT License (see LICENSE for details)
 Written by Waleed Abdulla
@@ -30,30 +31,6 @@ import utils
 #  Visualization
 ############################################################
 
-def display_images(images, titles=None, cols=4, cmap=None, norm=None,
-                   interpolation=None):
-    """Display the given set of images, optionally with titles.
-    images: list or array of image tensors in HWC format.
-    titles: optional. A list of titles to display with each image.
-    cols: number of images per row
-    cmap: Optional. Color map to use. For example, "Blues".
-    norm: Optional. A Normalize instance to map values to colors.
-    interpolation: Optional. Image interporlation to use for display.
-    """
-    titles = titles if titles is not None else [""] * len(images)
-    rows = len(images) // cols + 1
-    plt.figure(figsize=(14, 14 * rows // cols))
-    i = 1
-    for image, title in zip(images, titles):
-        plt.subplot(rows, cols, i)
-        plt.title(title, fontsize=9)
-        plt.axis('off')
-        plt.imshow(image.astype(np.uint8), cmap=cmap,
-                   norm=norm, interpolation=interpolation)
-        i += 1
-    plt.show()
-
-
 def random_colors(N, bright=True):
     """
     Generate random colors.
@@ -66,17 +43,11 @@ def random_colors(N, bright=True):
     random.shuffle(colors)
     return colors
 
-
 def apply_mask(image, mask, color, alpha=0.5):
     """Apply the given mask to the image.
     """
 
     image = np.where(mask == 1, image * (1 - alpha) + alpha * color[0] * 255, image)
-    return image
-
-def apply_target(image, target, color, alpha=0.5):
-    
-    image = np.where(target > 0.5, 0, image)
     return image
 
 def display_instances(image, target, boxes, masks, class_ids, class_names,
@@ -152,128 +123,6 @@ def display_instances(image, target, boxes, masks, class_ids, class_names,
 
     ax.imshow(masked_image, cmap=plt.cm.pink)
 
-def build_image(image, target, boxes, masks, bunet_mask, class_ids, class_names,
-                      scores=None, title="",
-                      figsize=(16, 16), ax=None):
-    """
-    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
-    masks: [height, width, num_instances]
-    class_ids: [num_instances]
-    class_names: list of class names of the dataset
-    scores: (optional) confidence scores for each box
-    figsize: (optional) the size of the image.
-    """
-    # Number of instances
-    N = boxes.shape[0]
-    if not N:
-        print("\n*** No instances to display *** \n")
-    else:
-        assert boxes.shape[0] == masks.shape[-1] == class_ids.shape[0]
-
-    if not ax:
-        fig, ax = plt.subplots(1, 3, figsize=figsize)
-
-    # Generate random colors
-    colors = random_colors(N)
-
-    # Show area outside image boundaries.
-    height, width = image.shape[:2]
-
-    for i in range(3):
-        ax[i].axis('off')
-
-    masked_image = image[:,:,0].copy() #astype(np.uint32)
-    for i in range(N):
-        color = colors[i]
-
-        # Bounding box
-        if not np.any(boxes[i]):
-            # Skip this instance. Has no bbox. Likely lost in image cropping.
-            continue
-        y1, x1, y2, x2 = boxes[i]
-        p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
-                              alpha=0.7, linestyle="dashed",
-                              edgecolor=color, facecolor='none')
-        ax[0].add_patch(p)
-
-        # Label
-        class_id = class_ids[i]
-        score = scores[i] if scores is not None else None
-        label = class_names[class_id]
-        x = random.randint(x1, (x1 + x2) // 2)
-        caption = "{:.3f}".format(score)
-        ax[0].text(x1, y1 + 8, caption,
-                color='tab:gray', size=6, backgroundcolor="none")
-
-        masked_image = masked_image
-        ax[0].imshow(masked_image, cmap=plt.cm.pink)
-        ax[1].imshow(target, cmap=plt.cm.pink)
-        ax[2].imshow(bunet_mask, cmap=plt.cm.pink)
-
-    plt.show()
-
-def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10):
-    """
-    anchors: [n, (y1, x1, y2, x2)] list of anchors in image coordinates.
-    proposals: [n, 4] the same anchors but refined to fit objects better.
-    """
-    masked_image = image.copy()
-
-    # Pick random anchors in case there are too many.
-    ids = np.arange(rois.shape[0], dtype=np.int32)
-    ids = np.random.choice(
-        ids, limit, replace=False) if ids.shape[0] > limit else ids
-
-    fig, ax = plt.subplots(1, figsize=(12, 12))
-    if rois.shape[0] > limit:
-        plt.title("Showing {} random ROIs out of {}".format(
-            len(ids), rois.shape[0]))
-    else:
-        plt.title("{} ROIs".format(len(ids)))
-
-    # Show area outside image boundaries.
-    ax.set_ylim(image.shape[0] + 20, -20)
-    ax.set_xlim(-50, image.shape[1] + 20)
-    ax.axis('off')
-
-    for i, id in enumerate(ids):
-        color = np.random.rand(3)
-        class_id = class_ids[id]
-        # ROI
-        y1, x1, y2, x2 = rois[id]
-        p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
-                              edgecolor=color if class_id else "gray",
-                              facecolor='none', linestyle="dashed")
-        ax.add_patch(p)
-        # Refined ROI
-        if class_id:
-            ry1, rx1, ry2, rx2 = refined_rois[id]
-            p = patches.Rectangle((rx1, ry1), rx2 - rx1, ry2 - ry1, linewidth=2,
-                                  edgecolor=color, facecolor='none')
-            ax.add_patch(p)
-            # Connect the top-left corners of the anchor and proposal for easy visualization
-            ax.add_line(lines.Line2D([x1, rx1], [y1, ry1], color=color))
-
-            # Label
-            label = class_names[class_id]
-            ax.text(rx1, ry1 + 8, "{}".format(label),
-                    color='w', size=11, backgroundcolor="none")
-
-            # Mask
-            m = utils.unmold_mask(mask[id], rois[id]
-                                  [:4].astype(np.int32), image.shape)
-            masked_image = apply_mask(masked_image, m, color)
-
-    ax.imshow(masked_image)
-
-    # Print stats
-    print("Positive ROIs: ", class_ids[class_ids > 0].shape[0])
-    print("Negative ROIs: ", class_ids[class_ids == 0].shape[0])
-    print("Positive Ratio: {:.2f}".format(
-        class_ids[class_ids > 0].shape[0] / class_ids.shape[0]))
-
-
-# TODO: Replace with matplotlib equivalent?
 def draw_box(image, box, color):
     """Draw 3-pixel width bounding boxes on the given image array.
     color: list of 3 int values for RGB.
@@ -284,29 +133,6 @@ def draw_box(image, box, color):
     image[y1:y2, x1:x1 + 1] = color
     image[y1:y2, x2:x2 + 1] = color
     return image
-
-
-def display_top_masks(image, mask, class_ids, class_names, limit=4):
-    """Display the given image and the top few class masks."""
-    to_display = []
-    titles = []
-    to_display.append(image)
-    titles.append("H x W={}x{}".format(image.shape[0], image.shape[1]))
-    # Pick top prominent classes in this image
-    unique_class_ids = np.unique(class_ids)
-    mask_area = [np.sum(mask[:, :, np.where(class_ids == i)[0]])
-                 for i in unique_class_ids]
-    top_ids = [v[0] for v in sorted(zip(unique_class_ids, mask_area),
-                                    key=lambda r: r[1], reverse=True) if v[1] > 0]
-    # Generate images and titles
-    for i in range(limit):
-        class_id = top_ids[i] if i < len(top_ids) else -1
-        # Pull masks of instances belonging to the same class.
-        m = mask[:, :, np.where(class_ids == class_id)[0]]
-        m = np.sum(m * np.arange(1, m.shape[-1] + 1), -1)
-        to_display.append(m)
-        titles.append(class_names[class_id] if class_id != -1 else "-")
-    display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
 
 def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
     """Draw bounding boxes and segmentation masks with differnt
@@ -322,7 +148,7 @@ def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
     """
     # Number of boxes
     max_intersect = 0
-    gt_idx = 0
+    gt_idx_list = []
     for i in range(1, gt_nles + 1):
         # Go through each lesion and see if max intersect is > 0.5 * lesion size, or > 3 voxels
         # if it is, the instance mask is green (TP), otherwise, it is blue (undetected FN).
@@ -330,67 +156,68 @@ def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
         intersect = mask[gt_labels == i].sum()
         if intersect >= 3 or intersect >= 0.5 * lesion_size:
             max_intersect = intersect
-            gt_idx = i
+            gt_idx_list.extend([i])
 
-    N=2
-    print('Max intersect : ', max_intersect)
     if max_intersect != 0:
         # Color mask green; it is a true positive
-        hsv = [(0.38, 0.88, 0.8) for i in range(N)]
+        hsv = [(0.38, 0.88, 0.8)]
         colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
         color = colors[0]
-        return color, gt_idx
+        return color, gt_idx_list
 
     else:
         # Color mask red; it is a false positive
-        hsv = [(0.02, 0.67, 1.0) for i in range(N)]
+        hsv = [(0.02, 0.67, 1.0)]
         colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
         color = colors[0]
-        return color, None
+        gt_idx_list.extend([None])
+        return color, gt_idx_list
 
-def get_box_color(box, masks):
+def get_box_color(box, gt_masks, gt_labels, gt_nles):
+    # Look at box. Return label ids of gt lesions with intersect > 3 or 0.5 * lesion size
+    # then gt lesions whose labels haven't been returned are false negatives
     y1, x1, y2, x2 = box
-    box_matrix = np.zeros((masks.shape[0], masks.shape[1]))
+    box_matrix = np.zeros((gt_masks.shape[0], gt_masks.shape[1]))
     box_matrix[y1:y2, x1:x2,] = 1
     box_size = np.sum(box_matrix)
-    intersect = np.sum(box_matrix * masks)
 
     # Now for the union, figure out which lesion is contributing to intersect, then 
     # union is the sum of the lesion size plus box size - minus the intersect
-    labels, nles = ndimage.label(masks)
     max_intersect = 0
     max_size = 0
-    for i in range(1, nles + 1):
+    gt_idx_list = []
+    for i in range(1, gt_nles + 1):
         
-        masks[labels != i] = 0
-        masks[labels == i] = 1
+        gt_masks[gt_labels != i] = 0
+        gt_masks[gt_labels == i] = 1
  
         # Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
-        lesion_size = np.sum(masks[labels == i])
-        lesion_intersect = np.sum(masks * box_matrix)
-        if lesion_intersect > max_intersect:
+        lesion_size = np.sum(gt_masks[gt_labels == i])
+        lesion_intersect = np.sum(gt_masks * box_matrix)
+        if lesion_intersect > max_intersect and (lesion_intersect >= 0.5 * lesion_size or lesion_intersect >= 3):
             lesion_choice = i
+            gt_idx_list.extend([i])
             max_intersect = lesion_intersect
             max_size = lesion_size
        
     
     # Then IoU:
-    union = box_size + max_size - intersect
-    iou = intersect / union
+    union = box_size + max_size - max_intersect
+    iou = max_intersect / union
 
     # Reset mask
-    for i in range(1, nles + 1):
-        masks[labels == i] = 1
+    for i in range(1, gt_nles + 1):
+        gt_masks[gt_labels == i] = 1
 
-    labels, nles2 = ndimage.label(masks)
-    if intersect != 0:
+    if max_intersect != 0:
         # True positive
         color = 'xkcd:bright green'
+        return color, gt_idx_list
     else:
         # False negative
         color = 'r'
-    
-    return color
+        gt_idx_list.extend([None])
+        return color, gt_idx_list
 
 def draw_unc_mask(t2, unc):
     _, ax = plt.subplots(1, figsize=(12, 12))
@@ -437,7 +264,9 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
 
     # Generate random colors
     colors = random_colors(N, bright=True)
- 
+    gt_idx_list = []
+    gt_labels, gt_nles = ndimage.label(gt_mask)
+
     for i in range(N):
         # Box visibility
         visibility = visibilities[i] if visibilities is not None else 2
@@ -463,7 +292,8 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
 
             # Get bounding box edge color based on IoU
             if pn_labels:
-                bx_color = get_box_color([y1,x1,y2,x2], gt_mask)
+                bx_color, gt_idx = get_box_color([y1,x1,y2,x2], gt_mask, gt_labels, gt_nles)
+                gt_idx_list.extend(gt_idx)
 
                 p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
                                   alpha=alpha, linestyle=style,
@@ -474,6 +304,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                                   edgecolor='r', facecolor='none')
 
             ax.add_patch(p)
+
         # Captions
         if captions is not None:
             caption = captions[i]
@@ -487,13 +318,29 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                     bbox={'facecolor': color, 'alpha': 0.4,
                           'pad': 1, 'edgecolor': 'none'})
 
-    
+    # Now go through the gt_idx list and get indices for lesions not detected (FNs):
+    fn_indices = [gt_idx for gt_idx in range(1, gt_nles + 1) if gt_idx not in gt_idx_list]
+    if len(fn_indices) != 0 and boxes is not None:
+        for i in fn_indices:
+            gt_mask[gt_labels != i] = 0
+            gt_mask[gt_labels == i] = 1
+            bbox = utils.extract_bboxes(gt_mask, dims=2, buf=1)
+            bbox = bbox[0, 0:4]
+            y1, x1, y2, x2 = bbox
+            p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+                                alpha=alpha, linestyle=style,
+                                edgecolor='b', facecolor='none')
+            ax.add_patch(p)
+        for i in range(1, gt_nles + 1):
+            gt_mask[gt_labels == i] = 1
+    else:
+        pass
+
     #------------------------Masks------------------------------
     # Two options: can display masks as one mask with one color, or can display them as
     # TPs = green, FPs = red, FNs = blue
 
     if mask is not None and pn_labels == False:
-        print('Mask shape: ', mask.shape)
         colors = random_colors(2, bright=True)
         color = colors[0]
         masked_image = apply_mask(masked_image, mask, color)
@@ -513,7 +360,6 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             # Return a mask for each lesion instance
             gt_labels, gt_nles = ndimage.label(gt_mask)
             labels, nles = ndimage.label(mask)
-            print('Nles 1 : ', nles)
             masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
             # Check if there are no lesions
@@ -531,13 +377,10 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             for i in range(1, nles + 1):
                 mask[labels == i] = 1
 
-            print('Masks shape :', masks.shape[0])
             gt_idx_list = []
             for i in range(masks.shape[0]):
                 mask_color, gt_idx = get_mask_color(masks[i], gt_mask, gt_labels, gt_nles)
-                gt_idx_list.append(gt_idx)
-                print('Masks shape (for i in masks shape[0]):', masks.shape[0])
-                print('Mask color : ', mask_color)
+                gt_idx_list.extend(gt_idx)
                 masked_image = apply_mask(masked_image, masks[i], mask_color)
                 # Mask Polygon
                 # Pad to ensure proper polygons for masks that touch image edges.
@@ -677,9 +520,9 @@ class IndexTracker(object):
         self.ax[1][1].axis('off')
         self.ax[1][2].axis('off')
 
-        #fontdict = {'fontsize':10}
-        #self.ax[0][0].set_title(r'Det-Net Output, GT Mask, and T2 Image (confidence thresh = 0.95)', fontdict=fontdict)
-        #self.ax[0][1].set_title(r'Ground Truth Lesion Mask', fontdict=fontdict)
+        fontdict = {'fontsize':10}
+        #self.ax[0][0].set_title(r'Tanyas netseg', fontdict=fontdict)
+        #self.ax[0][1].set_title(r'My netseg', fontdict=fontdict)
         #self.ax[1][0].set_title(r'U-Net Output ($\sigma=0.5$)', fontdict=fontdict)
         #self.ax[1][1].set_title(r'U-Net MC Sample Variance', fontdict=fontdict)
         self.U = U
@@ -701,6 +544,8 @@ class IndexTracker(object):
             self.ind = (self.ind + 1) % self.slices
         else:
             self.ind = (self.ind - 1) % self.slices
+
+
         self.update()
 
     def update(self):
@@ -770,8 +615,8 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         # Generate bounding box slices
         if N != 0:
             assert N == masks.shape[-1] == class_ids.shape[0]
+            #ax[0][0] = draw_boxes(t2_slice, mask=netseg_slice, gt_mask=target_slice, pn_labels=True)
             ax[0][0] = draw_boxes(t2_slice, boxes=boxes, gt_mask=target_slice, pn_labels=True)
-            #ax[0][0] = draw_boxes(t2_slice, boxes=boxes, captions=scores)
         else:
             ax[0][0] = draw_boxes(t2_slice) 
 

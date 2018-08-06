@@ -274,7 +274,7 @@ class Dataset(object):
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
 		t2, opts = nrrd.read(t2_file)
-		#t2 = np.asarray(t2)[:,:,self._slice_idx]
+		t2 = np.asarray(t2)[:,:,self._slice_idx]
 	 
 		return t2
 
@@ -289,7 +289,7 @@ class Dataset(object):
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
 
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
-		#uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
+		uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
 		return uncmcvar
 
 	def load_masks(self, image_id, dataset, config):
@@ -316,14 +316,14 @@ class Dataset(object):
 		labels = {}
 		nles = {}
 		labels, nles = ndimage.label(gt_mask)
-		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
-		#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+		#gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+		gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
 		# Check if there are no lesions
 
 		if nles == 0:
-			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
-			#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+			#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 			gt_masks[0] = gt_mask
 
 		# Look for all the voxels associated with a particular lesion
@@ -334,8 +334,8 @@ class Dataset(object):
 			gt_mask[labels == i] = 1
 			gt_masks[i-1] = gt_mask
 
-		gt_masks = gt_masks.transpose(1, 2, 3, 0)
-		#gt_masks = gt_masks.transpose(1, 2, 0)
+		#gt_masks = gt_masks.transpose(1, 2, 3, 0)
+		gt_masks = gt_masks.transpose(1, 2, 0)
 
 		return net_mask, gt_masks, class_ids, nles
 
