@@ -6,6 +6,7 @@ from os.path import join
 
 files = sorted(listdir('../images'))
 
+# Little script for changing type of nrrd files
 for f in files:
 	if f.endswith('netseg.nrrd'):
 		netseg, opts = nrrd.read(f)

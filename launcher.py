@@ -34,8 +34,6 @@ import model as modellib
 from model import Dataset
 from scipy import ndimage
 
-from analyze.mrcnn_analyzer import MRCNNAnalyzer
-
 # Root directory of the project
 ROOT_DIR = os.getcwd()
 
@@ -112,106 +110,6 @@ class MSDataset(utils.Dataset):
 	@staticmethod
 	def _rotate(l, n):
 		return l[-n:] + l[:-n]
-
-############################################################
-#  Evaluation
-############################################################
-
-def build_results(dataset, image_ids, rois, class_ids, scores, masks, gt_bbox, 
-							gt_class_id, gt_mask):
-	"""Arrange resutls 
-	"""
-	# If no results, return an empty list
-	if rois is None:
-		return []
-
-	results = []
-	gts = []
-	for image_id in image_ids:
-		# Loop through detections
-		for i in range(rois.shape[0]):
-			class_id = class_ids[i]
-			score = scores[i]
-			bbox = np.around(rois[i], 1)
-			mask = masks[:, :, i]
-
-			result = {
-				"image_id": image_id,
-				"bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
-				"score": score,
-				"segmentation": np.asfortranarray(mask)
-			}
-			results.append(result)
-
-		lesions = {}
-		nb_les = {}
-		labels, nb_les = ndimage.label(gt_mask)
-
-		# Loop through ground truth lesions
-		for les in range(nb_les):
-			bbox = gt_bbox[les] 
-			gt = {
-				"image_id": image_id,
-				"bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
-				"segmentation": np.asfortranarray(gt_mask[:,:,les])
-			}
-			gts.append(gt)
-	
-	return results, gts
-
-
-def evaluate(model, config, dataset, eval_type="bbox", limit=0, image_ids=None):
-	"""Runs official evaluation.
-	dataset: A Dataset object with validation data
-	eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
-	limit: if not 0, it's the number of images to use for evaluation
-	"""
-	# Pick images from the dataset
-	image_ids = image_ids or dataset._image_ids
-
-	# Limit to a subset
-	if limit:
-		image_ids = image_ids[:limit]
-
-	t_prediction = 0
-	t_start = time.time()
-
-	results = []
-	gts = []
-	for i, image_id in enumerate(image_ids):
-		# Load image
-		t2_image = dataset.load_t2_image(image_id, dataset, config)
-		uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
-		net_mask, gt_masks, gt_class_ids = dataset.load_masks(image_id, dataset, config)
-
-		image = np.stack([t2_image, uncmcvar, net_mask], axis=0)
-		gt_bboxes = utils.extract_bboxes(gt_masks, dims=2, buf=2)
-
-		# Run detection
-		t = time.time()
-		r = model.detect([image])[0]
-		t_prediction += (time.time() - t)
-
-		# Convert results
-		image_results, gt_results = build_results(dataset, image_ids[i:i + 1],
-										   r["rois"], r["class_ids"],
-										   r["scores"], r["masks"],
-										   gt_bboxes, gt_class_ids,
-										   gt_masks)
-		gts.extend(gt_results)
-		results.extend(image_results)
-
-
-	# Evaluate
-	Eval = Evaluate(config, gts, results, eval_type)
-	Eval.params.imgIds = image_ids
-	Eval.evaluate()
-	Eval.accumulate()
-	Eval.summarize()
-
-	print("Prediction time: {}. Average {}/image".format(
-		t_prediction, t_prediction / len(image_ids)))
-	print("Total time: ", time.time() - t_start)
 
 
 ###################################################################
@@ -320,14 +218,14 @@ if __name__ == '__main__':
 		# Training - Stage 1
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10,
+					learning_rate=config.LEARNING_RATE,
 					epochs=10,
 					layers='heads')
 
 		# Training - Stage 2
 		print("Fine tune Resnet stage 4 and up")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10,
+					learning_rate=config.LEARNING_RATE,
 					epochs=20,
 					layers='4+')
 
@@ -335,16 +233,32 @@ if __name__ == '__main__':
 		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10 , #Changed from /10
+					learning_rate=config.LEARNING_RATE, #Changed from /10
 					epochs=35,
 					layers='all')
 		
 		# Training - Stage 4
+		# Network heads
+		print("Fine tune all layers")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE / 10, #Changed from /10
+					epochs=50,
+					layers='heads')
+
+		# Training - Stage 5
+		# Fine tune all layers
+		print("Fine tune all layers")
+		model.train_model(dataset_train, dataset_val,
+					learning_rate=config.LEARNING_RATE / 10, #Changed from /10
+					epochs=60,
+					layers='all')
+
+		# Training - Stage 6
 		# Fine tune all layers
 		print("Fine tune all layers (learning rate further reduced)")
 		model.train_model(dataset_train, dataset_val,
 					learning_rate=config.LEARNING_RATE / 50 , #Changed from /10
-					epochs=50,
+					epochs=70,
 					layers='all')
 
 	elif args.command == "evaluate":

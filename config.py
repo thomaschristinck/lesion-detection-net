@@ -144,7 +144,7 @@ class Config(object):
     # Learning rate and momentum
     # The Mask RCNN paper uses lr=0.02, but ours is different probably
     # due to differences in optimzer implementation.
-    LEARNING_RATE = 0.0018  #originally 0.0014
+    LEARNING_RATE = 0.005  #originally 0.0014
     LEARNING_MOMENTUM = 0.9
 
     # Weight decay regularization

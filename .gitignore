@@ -12,3 +12,6 @@ logs/
 images/
 examples/
 images2/
+build/
+__pycache__/
+*box_test.py

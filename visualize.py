@@ -46,7 +46,6 @@ def random_colors(N, bright=True):
 def apply_mask(image, mask, color, alpha=0.5):
     """Apply the given mask to the image.
     """
-
     image = np.where(mask == 1, image * (1 - alpha) + alpha * color[0] * 255, image)
     return image
 
@@ -178,7 +177,7 @@ def get_box_color(box, gt_masks, gt_labels, gt_nles):
     # then gt lesions whose labels haven't been returned are false negatives
     y1, x1, y2, x2 = box
     box_matrix = np.zeros((gt_masks.shape[0], gt_masks.shape[1]))
-    box_matrix[y1:y2, x1:x2,] = 1
+    box_matrix[y1:y2,x1:x2] = 1
     box_size = np.sum(box_matrix)
 
     # Now for the union, figure out which lesion is contributing to intersect, then 
@@ -194,11 +193,11 @@ def get_box_color(box, gt_masks, gt_labels, gt_nles):
         # Now we classify the lesion and apply a buffer based on the lesion class (CHANGE LATER??)
         lesion_size = np.sum(gt_masks[gt_labels == i])
         lesion_intersect = np.sum(gt_masks * box_matrix)
-        if lesion_intersect > max_intersect and (lesion_intersect >= 0.5 * lesion_size or lesion_intersect >= 3):
-            lesion_choice = i
+        if (lesion_intersect >= 0.5 * lesion_size or lesion_intersect >= 3):
             gt_idx_list.extend([i])
-            max_intersect = lesion_intersect
-            max_size = lesion_size
+            if lesion_intersect > max_intersect:
+                max_intersect = lesion_intersect
+                max_size = lesion_size
        
     
     # Then IoU:

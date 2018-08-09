@@ -306,23 +306,21 @@ class Dataset(object):
 		gt_mask = np.asarray(gt_mask)
 		net_mask = np.asarray(net_mask)
 		
-		#net_mask = net_mask[:,:,self._slice_idx]
-		#gt_mask = gt_mask[:,:,self._slice_idx]
+		net_mask = net_mask[:,:,self._slice_idx]
+		gt_mask = gt_mask[:,:,self._slice_idx]
 
 		# Remove small lesions
 		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
 		
 		# Return a mask for each lesion instance
-		labels = {}
-		nles = {}
 		labels, nles = ndimage.label(gt_mask)
 		#gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
-		gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
 		# Check if there are no lesions
 
 		if nles == 0:
-			#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+			#t_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
 			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 			gt_masks[0] = gt_mask
 
@@ -335,7 +333,7 @@ class Dataset(object):
 			gt_masks[i-1] = gt_mask
 
 		#gt_masks = gt_masks.transpose(1, 2, 3, 0)
-		gt_masks = gt_masks.transpose(1, 2, 0)
+		st_masks = gt_masks.transpose(1, 2, 0)
 
 		return net_mask, gt_masks, class_ids, nles
 
@@ -377,7 +375,7 @@ def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 	if scale != 1:
 		image = transform.resize(
 			image, (round(h * scale), round(w * scale)))
-
+		
 	image = image.transpose(1,2,0)
 
 	# Need padding?

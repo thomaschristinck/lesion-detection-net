@@ -1196,12 +1196,12 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	#image = np.stack([t2_image, t2_image, t2_image], axis=0)
 	shape = image.shape
 
-	#image, window, scale, padding = utils.resize_image(
-	#	image,
-	#	min_dim=config.IMAGE_MIN_DIM,
-	#	max_dim=config.IMAGE_MAX_DIM,
-	#	padding=config.IMAGE_PADDING,
-	#	dims=config.BRAIN_DIMENSIONS)
+	image, window, scale, padding = utils.resize_image(
+		image,
+		min_dim=config.IMAGE_MIN_DIM,
+		max_dim=config.IMAGE_MAX_DIM,
+		padding=config.IMAGE_PADDING,
+		dims=config.BRAIN_DIMENSIONS)
 	
 	# Resize masks - ultimately will compress lesion mask size to save memory (refer to Mask RCNN Paper)
 	dims=config.BRAIN_DIMENSIONS
@@ -1413,7 +1413,6 @@ class Dataset(torch.utils.data.Dataset):
 		
 		# Mold the image if we're training (network expects molded images)
 		if self._mode == 'train' or self._mode == 'val':
-			print('MOLDING')
 			image = mold_image(image.astype(np.float32), self._config)
 	
 		# Convert
@@ -2019,7 +2018,7 @@ class MaskRCNN(nn.Module):
 
 		nb_img_valid = len(dataset._image_ids) # NEED TO CHANGE THIS LINE, NOT SURE HOW TO GET THE TOTAL NUMBER OF IMAGES FROM YOUR test_generator
 		print('nb_img_valid is ', len(test_generator))
-		thresholds = [0.2]
+		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 1.0]
 		nb_thrs = len(thresholds)
 		fpr = np.empty((nb_img_valid, nb_thrs))
 		tpr = np.empty((nb_img_valid, nb_thrs))
@@ -2069,11 +2068,12 @@ class MaskRCNN(nn.Module):
 				
 				tpr_lesions_l[i, j] = lesion_stats['tpr']['large']
 				fdr_lesions_l[i, j] = lesion_stats['fdr']['large']
+				print('i, j : ', i, j)
 			
-			i +=1
 
-			print("\n tpr-lesion:", np.mean(tpr_lesions, axis=0))
-			print("\n fdr-lesion:", np.mean(fdr_lesions, axis=0))
+			print("\n tpr-lesion:", tpr_lesions[i])
+			print("\n fdr-lesion:", fdr_lesions[i])
+			i +=1
 		
 		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
 		tpr_lesions_mean = np.mean(tpr_lesions, axis=0)
