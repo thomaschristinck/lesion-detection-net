@@ -269,7 +269,7 @@ if __name__ == '__main__':
 		print("Running evaluation on {} images.".format(args.limit))
 		
 		# Evaluate the model (produce TPR/FPR graphs)
-		model.evaluate_model(dataset_test, args.logs)
+		model.evaluate_model_segmentation(dataset_test, args.logs)
 	
 		
 	else:

@@ -177,7 +177,7 @@ def get_box_color(box, gt_masks, gt_labels, gt_nles):
     # then gt lesions whose labels haven't been returned are false negatives
     y1, x1, y2, x2 = box
     box_matrix = np.zeros((gt_masks.shape[0], gt_masks.shape[1]))
-    box_matrix[y1:y2,x1:x2] = 1
+    box_matrix[y1:y2, x1:x2] = 1
     box_size = np.sum(box_matrix)
 
     # Now for the union, figure out which lesion is contributing to intersect, then 
@@ -660,10 +660,12 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
     nseg_image = nseg_image.astype(np.uint8)
     target_image = target_image.astype(np.uint8)
     unc_image = unc_image.astype(np.uint8)
+    
     boxed_image = boxed_image.transpose(1, 2, 0, 3)
     nseg_image = nseg_image.transpose(1, 2, 0, 3)
     target_image = target_image.transpose(1, 2, 0, 3)
     unc_image = unc_image.transpose(1, 2, 0, 3)
+    
     nseg_image = np.rot90(nseg_image, axes=(0,1))
     boxed_image = np.rot90(boxed_image, axes=(0,1))
     target_image = np.rot90(target_image, axes=(0,1))

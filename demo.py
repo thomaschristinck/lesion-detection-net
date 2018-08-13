@@ -48,7 +48,7 @@ IMAGE_DIR = os.path.join(ROOT_DIR, "images")
 out_dir = '/usr/local/data/thomasc/logs/'
 
 # Create model object.
-model = modellib.MaskRCNN(model_dir=MODEL_DIR, config=config)
+model = modellib.MaskRCNN(model_dir=MODEL_DIR, config=config, thresh=0.95)
 if config.GPU_COUNT:
     model = model.cuda()
 

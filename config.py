@@ -31,7 +31,7 @@ class Config(object):
 
     # Path to pretrained model
     #CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training3(t2_stack)/', "mask_rcnn_lesion_mask_rcnn_0025.pth")
-    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0100.pth")
+    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0075.pth")
     
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
@@ -156,7 +156,7 @@ class Config(object):
     # 'Modalities' considered in the network. 'Netseg' refers to lesion segmentation mask provided
     # by another network. 'Target' refers to the target ground truh lesion segmentation mask. The 
     # uncertainty measures are those used in Tanya Nair's BUnet.
-    MODALITIES = ['bbox', 'netseg', 't2', 'target', 'uncmcvar', 'uncent', 'uncmi', 'uncprvar']
+    MODALITIES = ['netseg', 't2', 'target', 'uncmcvar', 'uncent', 'uncmi', 'uncprvar']
 
     # Use RPN ROIs or externally generated ROIs for training
     # Keep this True for most situations. Set to False if you want to train

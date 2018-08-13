@@ -719,7 +719,7 @@ def clip_to_window(window, boxes):
 
 	return boxes
 
-def refine_detections(rois, probs, deltas, window, config):
+def refine_detections(rois, probs, deltas, window, config, thresh):
 	"""Refine classified proposals and filter overlaps and return final
 	detections.
 
@@ -770,8 +770,8 @@ def refine_detections(rois, probs, deltas, window, config):
 	keep_bool = class_ids>0
 
 	# Filter out low confidence boxes
-	if config.DETECTION_MIN_CONFIDENCE:
-		keep_bool = keep_bool & (class_scores >= config.DETECTION_MIN_CONFIDENCE)
+	if thresh:
+		keep_bool = keep_bool & (class_scores >= thresh)
 
 	if torch.nonzero(keep_bool).size():
 		keep = torch.nonzero(keep_bool)[:,0]
@@ -820,7 +820,7 @@ def refine_detections(rois, probs, deltas, window, config):
 	return result
 
 
-def detection_layer(config, rois, mrcnn_class, mrcnn_bbox, image_meta):
+def detection_layer(config, rois, mrcnn_class, mrcnn_bbox, image_meta, thresh):
 	"""Takes classified proposal boxes and their bounding box deltas and
 	returns the final detection boxes.
 
@@ -833,7 +833,7 @@ def detection_layer(config, rois, mrcnn_class, mrcnn_bbox, image_meta):
 
 	_, _, window, _ = parse_image_meta(image_meta)
 	window = window[0]
-	detections = refine_detections(rois, mrcnn_class, mrcnn_bbox, window, config)
+	detections = refine_detections(rois, mrcnn_class, mrcnn_bbox, window, config, thresh)
 
 	return detections
 
@@ -1441,13 +1441,14 @@ class MaskRCNN(nn.Module):
 	"""Encapsulates the Mask RCNN model functionality.
 	"""
 
-	def __init__(self, config, model_dir):
+	def __init__(self, config, model_dir, thresh):
 		"""
 		config: A Sub-class of the Config class
 		model_dir: Directory to save training logs and trained weights
 		"""
 		super(MaskRCNN, self).__init__()
 		self.config = config
+		self.thresh = thresh
 		self.model_dir = model_dir
 		self.set_log_dir()
 		self.build(config=config)
@@ -1695,7 +1696,7 @@ class MaskRCNN(nn.Module):
 
 			# Detections
 			# output is [batch, num_detections, (y1, x1, y2, x2, class_id, score)] in image coordinates
-			detections = detection_layer(self.config, rpn_rois, mrcnn_class, mrcnn_bbox, image_metas)
+			detections = detection_layer(self.config, rpn_rois, mrcnn_class, mrcnn_bbox, image_metas, self.thresh)
 	
 			# Convert boxes to normalized coordinates
 			# TODO: let DetectionLayer return normalized coordinates to avoid
@@ -2011,14 +2012,13 @@ class MaskRCNN(nn.Module):
 
 		return loss_sum, loss_rpn_class_sum, loss_rpn_bbox_sum, loss_mrcnn_class_sum, loss_mrcnn_bbox_sum, loss_mrcnn_mask_sum
 
-	def evaluate_model(self, dataset, logs, nb_mc=10):
+	def evaluate_model_segmentation(self, dataset, logs, nb_mc=10):
 		test_set = Dataset(dataset, self.config, mode='test', augment=True)
 		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 		  ####### NAZ's CODE ############################################
 
-		nb_img_valid = len(dataset._image_ids) # NEED TO CHANGE THIS LINE, NOT SURE HOW TO GET THE TOTAL NUMBER OF IMAGES FROM YOUR test_generator
-		print('nb_img_valid is ', len(test_generator))
-		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 1.0]
+		nb_img_valid = len(dataset._image_ids)
+		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 1.0, 1.1]
 		nb_thrs = len(thresholds)
 		fpr = np.empty((nb_img_valid, nb_thrs))
 		tpr = np.empty((nb_img_valid, nb_thrs))
@@ -2039,10 +2039,7 @@ class MaskRCNN(nn.Module):
 			netseg = netseg.numpy()
 			gt_masks = gt_masks.numpy()
 			print("{}-th brain...".format(i+1))
-			y_true = gt_masks
-			y_pred = netseg
-			print('Netsge sum : ', np.sum(netseg))
-			print('target sum : ', np.sum(gt_masks))
+
 			for j, thr in enumerate(thresholds):
 				#y_pred_3d = np.reshape(y_pred, self.output_shape)[...,0] # NOT  SURE WHAT FORMAT YOUR NETWORK OUTPUT IS, IF IT IS 3D IGNORE THESE TWO LINES 
 				#y_true_3d = np.reshape(y_true, self.output_shape)[...,0] # IF YOU FLATTEN THE OUTPUT OF THE NETWORK YOU NEED TO CONVERT IT TO 3D HERE
@@ -2068,11 +2065,10 @@ class MaskRCNN(nn.Module):
 				
 				tpr_lesions_l[i, j] = lesion_stats['tpr']['large']
 				fdr_lesions_l[i, j] = lesion_stats['fdr']['large']
-				print('i, j : ', i, j)
 			
 
-			print("\n tpr-lesion:", tpr_lesions[i])
-			print("\n fdr-lesion:", fdr_lesions[i])
+			print("\n tpr-lesion:", tpr_lesions_s[i])
+			print("\n fdr-lesion:", fdr_lesions_s[i])
 			i +=1
 		
 		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
@@ -2108,110 +2104,6 @@ class MaskRCNN(nn.Module):
 		ax.grid(which='major', alpha=0.5)
 		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve.png")) ## NEED TO CHANGE THIS LINE, SAVE THE FIGURE WHEREVER YOU WANT
 		
-	'''	
-	def evaluate_model(self, dataset, logs, nb_mc=10):
-		test_set = Dataset(dataset, self.config, mode='test', augment=True)
-		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
-
-		result_list = []
-		#for threshold in [0.2]:
-		for threshold in [0.1111, 0.111, 0.1, 0.2, 0.3, 0.7, 0.8, 0.9, 0.999, 1.0]:
-		#for threshold in [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 1.0]:
-			pred_stats = {'ntp': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
-				'nfp': {'all': 0, 'small': 0, 'med': 0, 'large': 0},
-				'nfn': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
-				'fdr': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
-				'tpr': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
-				'nles': {'all': 0, 'small': 0, 'med': 0, 'large': 0}, 
-				'nles_gt': {'all': 0, 'small': 0, 'med': 0, 'large': 0}}
-			print('---- Threshold at {} ------'.format(threshold))
-			nb_images = 0
-			for inputs in test_generator:
-				netseg = inputs[0]
-				gt_masks = inputs[1]
-
-				# Wrap in variables
-				netseg = Variable(netseg, volatile=True)
-				gt_masks = Variable(gt_masks, volatile=True)
-
-				# To GPU
-				if self.config.GPU_COUNT:
-					netseg = netseg.cuda()
-					gt_masks = gt_masks.cuda()
-
-				# Run prediction and then evaluate results at several different threshold values.
-				#detections, mrcnn_mask = self.predict([images, image_metas, gt_class_ids, gt_boxes, gt_masks], mode='inference')
-				pred_stats_ex = evaluate.cca_img_no_unc(netseg, gt_masks, thresh=threshold)
-				for dicts in pred_stats:
-					for idx in pred_stats[dicts]:
-						pred_stats[dicts][idx] += pred_stats_ex[dicts][idx]
-					
-				nb_images += 1
-				if nb_images % 40 == 0 and nb_images >= 40:
-					print('Done {}/{} images'.format(nb_images, len(test_generator)))
-			for dicts in pred_stats:
-				for idx in pred_stats[dicts]:
-					pred_stats[dicts][idx] /= nb_images
-			print('Pred fdr : ', pred_stats['fdr'])
-			print('Pred tpr : ', pred_stats['tpr'])
-			print('Number of gt les : ', pred_stats['nles_gt'])
-			print('Number of les : ', pred_stats['nles'])
-			result_list.append(pred_stats)
-		# Now plot the items of interest (TPR / FPR)
-		x =[]
-		all_tpr = []
-		all_fdr = []
-		small_tpr = []
-		small_fdr = []
-		med_tpr = []
-		med_fdr = []
-		large_tpr = []
-		large_fdr = []
-		large_y = []
-		for thresh_level in range(len(result_list)):
-			x.append(thresh_level)
-		for pred in result_list:
-			# Clean this up later
-			for bin_size in pred['fdr']:
-				if bin_size == 'small':
-					small_tpr.append(pred['tpr'][bin_size])
-					small_fdr.append(pred['fdr'][bin_size])
-				elif bin_size == 'med':
-					med_tpr.append(pred['tpr'][bin_size])
-					med_fdr.append(pred['fdr'][bin_size])
-				elif bin_size == 'large':
-					large_tpr.append(pred['tpr'][bin_size])
-					large_fdr.append(pred['fdr'][bin_size])
-				elif bin_size == 'all':
-					all_tpr.append(pred['tpr'][bin_size])
-					all_fdr.append(pred['fdr'][bin_size])
-
-		#print('Small_tpr : ', small_tpr)
-		#print('Small_fdr : ', small_fdr)
-		#print('Large_tpr : ', large_tpr)
-		#print('Large_fdr : ', large_fdr)
-		##print(small_fdr)
-		#print(small_tpr)
-		#
-
-		print('Small_tpr : ', small_tpr)
-		print('Small_fdr : ', small_fdr)
-		print('Large_tpr : ', large_tpr)
-		print('Large_fdr : ', large_fdr)
-
-		#plt.plot(sorted(all_fdr), [x for _, x in sorted(zip(all_fdr, all_tpr))])
-
-		# Here I sort fdr's in order and keep them matched with the corresponding tpr - pretty sure
-		# there is no bug here
-		plt.plot(sorted(small_fdr), [x for _, x in sorted(zip(small_fdr, small_tpr))], label='small')
-		plt.plot(sorted(med_fdr), [x for _, x in sorted(zip(med_fdr, med_tpr))], label='medium')
-		plt.plot(sorted(large_fdr), [x for _, x in sorted(zip(large_fdr, large_tpr))], label='large')
-		plt.legend(loc=3)
-		plt.ylabel('True Positive Rate')
-		plt.xlabel('False Detection Rate')
-		plt.title('Uncertainty U-Net ROC')
-		plt.show()
-	'''
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
 		as an input to the network.
