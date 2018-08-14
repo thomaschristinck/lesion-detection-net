@@ -101,7 +101,7 @@ class MSDataset(utils.Dataset):
 		elif self._mode == 'val':
 			self._image_ids = self._image_ids[train_idx:valid_idx]
 		elif self._mode == 'test':
-			self._image_ids = self._image_ids[valid_idx:]
+			self._image_ids = self._image_ids[valid_idx:valid_idx + 35]
 
 		# Build (or rebuild) everything else from the info dicts.
 		self.num_images = int(len(self._image_ids) / 8)
@@ -159,7 +159,7 @@ if __name__ == '__main__':
 	# Create model
  
 	model = modellib.MaskRCNN(config=config,
-								  model_dir=args.logs)
+								  model_dir=args.logs, thresh=0)
 	if config.GPU_COUNT:
 		model = model.cuda()
 
@@ -269,7 +269,7 @@ if __name__ == '__main__':
 		print("Running evaluation on {} images.".format(args.limit))
 		
 		# Evaluate the model (produce TPR/FPR graphs)
-		model.evaluate_model_segmentation(dataset_test, args.logs)
+		model.evaluate_model_detection(dataset_test, args.logs)
 	
 		
 	else:

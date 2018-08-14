@@ -1184,7 +1184,7 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	net_mask, gt_mask, class_ids, nles = dataset.load_masks(image_id, dataset, config)
 
 	if mode == 'test':
-		return net_mask, gt_mask
+		return net_mask, gt_mask, t2_image, uncmcvar
 
 	nles = np.asarray([nles])
 	nles = nles.astype(np.int16)
@@ -1378,13 +1378,15 @@ class Dataset(torch.utils.data.Dataset):
 		image_id = self._image_ids[image_index]
 
 		if self._mode == 'test':
-			netseg, gt_masks = \
+			netseg, gt_masks, t2, unc = \
 			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
 						  use_mini_mask=self._config.USE_MINI_MASK, mode=self._mode)
 			gt_masks = torch.from_numpy(gt_masks.astype(int).transpose(3,0,1,2)).float()
 			netseg = torch.from_numpy(netseg).float()
+			t2 = torch.from_numpy(t2).float()
+			unc = torch.from_numpy(unc).float()
 
-			return netseg, gt_masks
+			return netseg, gt_masks, t2, unc
 
 		image, gt_class_ids, gt_boxes, gt_masks, image_metas, nles = \
 			load_image_gt(self._dataset, self._config, image_id, augment=self._augment,
@@ -2102,8 +2104,120 @@ class MaskRCNN(nn.Module):
 		ax.grid(which='both')
 		ax.grid(which='minor', alpha=0.2)
 		ax.grid(which='major', alpha=0.5)
-		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve.png")) ## NEED TO CHANGE THIS LINE, SAVE THE FIGURE WHEREVER YOU WANT
+		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve.png")) 
+
+	def evaluate_model_detection(self, dataset, logs, nb_mc=10):
+		test_set = Dataset(dataset, self.config, mode='test', augment=True)
+		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
+
+		# Create model object.
+		model = MaskRCNN(model_dir=self.config.CONTINUE_MODEL_PATH, 
+							config=self.config, thresh=0)
+		if self.config.GPU_COUNT:
+			model = model.cuda()
+
+		# Load weights 
+		model.load_state_dict(torch.load(self.config.CONTINUE_MODEL_PATH))
+
+		nb_img_valid = len(dataset._image_ids)
+		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 1.0, 1.1]
+		nb_thrs = len(thresholds)
+		fpr = np.empty((nb_img_valid, nb_thrs))
+		tpr = np.empty((nb_img_valid, nb_thrs))
+		fdr = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions_s = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions_s = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions_m = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions_m = np.empty((nb_img_valid, nb_thrs))
+		fdr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+		tpr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+
+		i = 0
+		for inputs in test_generator:
+			netseg = inputs[0]
+			gt_masks = inputs[1]
+			t2 = inputs[2]
+			unc = inputs[3]
+			netseg = netseg[0].numpy()
+			gt_masks = gt_masks[0].numpy()
+			t2 = t2[0].numpy()
+			unc = unc[0].numpy()
+			# First stack slices to make the input image
+			image = np.stack([t2, unc, netseg], axis = 0)
+			print("{}-th brain...".format(i+1))
+			for slice_idx in range(32,33):#image.shape[3]
+				# For each input, get boxes, masks, scores, etc.
+				results = model.detect([image[...,slice_idx]])
+				r = results[0]
+				boxes = r['rois']
+				masks = r['masks']
+				class_ids = r['class_ids'] 
+				scores =  r['scores']
+				for j, thr in enumerate(thresholds):
+					# Now go through all the thresholds for a slice. We add the stats for each volume (because lesion stats are on a per 
+					# slice basis) and then the stats are averaged across all volumes
+					y_pred_3d = netseg 
+					y_true_3d = gt_masks
+
+					import copy
+				
+					a = copy.copy(boxes)
+					b = copy.copy(gt_masks[...,slice_idx])
+
+					lesion_stats = evaluate.count_boxed_lesions(netbox=a.astype(np.float32), target=b.astype(np.int16), thresh=thr, scores=scores)
+	  
+					tpr_lesions[i, j] += lesion_stats['tpr']['all']
+					fdr_lesions[i, j] += lesion_stats['fdr']['all']
+				
+					tpr_lesions_s[i, j] += lesion_stats['tpr']['small']
+					fdr_lesions_s[i, j] += lesion_stats['fdr']['small']
+				
+					tpr_lesions_m[i, j] += lesion_stats['tpr']['med']
+					fdr_lesions_m[i, j] += lesion_stats['fdr']['med']
+				
+					tpr_lesions_l[i, j] += lesion_stats['tpr']['large']
+					fdr_lesions_l[i, j] += lesion_stats['fdr']['large']
+			
+
+			print("\n tpr-lesion:", tpr_lesions_s[i] / 64)
+			print("\n fdr-lesion:", fdr_lesions_s[i] / 64)
+			i +=1
 		
+		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
+		tpr_lesions_mean = np.mean(tpr_lesions, axis=0)
+		
+		fdr_lesions_mean_s = np.mean(fdr_lesions_s, axis=0)
+		tpr_lesions_mean_s = np.mean(tpr_lesions_s, axis=0)
+
+		fdr_lesions_mean_m = np.mean(fdr_lesions_m, axis=0)
+		tpr_lesions_mean_m = np.mean(tpr_lesions_m, axis=0)
+
+		fdr_lesions_mean_l = np.mean(fdr_lesions_l, axis=0)
+		tpr_lesions_mean_l = np.mean(tpr_lesions_l, axis=0)
+
+		fig = plt.figure()
+		ax = fig.add_subplot(1, 1, 1) 
+		plt.plot(fdr_lesions_mean, tpr_lesions_mean, label='lesion level-all')
+		plt.plot(fdr_lesions_mean_s, tpr_lesions_mean_s, label='lesion level-small')
+		plt.plot(fdr_lesions_mean_m, tpr_lesions_mean_m, label='lesion level-med')
+		plt.plot(fdr_lesions_mean_l, tpr_lesions_mean_l, label='lesion level-large') 
+		plt.legend(loc="lower right")
+		plt.xlabel('fdr')
+		plt.ylabel('tpr')
+		plt.title('Detection Net ROC')
+		major_ticks = np.arange(0, 1, 0.1)
+		minor_ticks = np.arange(0, 1, 0.02)
+		ax.set_xticks(major_ticks)
+		ax.set_xticks(minor_ticks, minor=True)
+		ax.set_yticks(major_ticks)
+		ax.set_yticks(minor_ticks, minor=True)
+		ax.grid(which='both')
+		ax.grid(which='minor', alpha=0.2)
+		ax.grid(which='major', alpha=0.5)
+		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve.png"))
+	
 	def mold_inputs(self, images):
 		"""Takes a list of images and modifies them to the format expected
 		as an input to the network.

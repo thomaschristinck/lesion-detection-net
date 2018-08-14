@@ -273,7 +273,6 @@ class Dataset(object):
 		t2_idx = int((image_id) * nb_mods + 1) # + 2
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
-		print('t2 file : ', t2_file)
 		t2, opts = nrrd.read(t2_file)
 		#t2 = np.asarray(t2)[:,:,self._slice_idx]
 	 
@@ -288,7 +287,6 @@ class Dataset(object):
 		# Offset is 4 for entropy, 5 for MC variance, 6 for mutual information, 7 for predictive prog
 		uncmcvar_idx = int((image_id) * nb_mods + 4) # + 5
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
-		print('unc file : ', uncmcvar_file)
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
 		#uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
 		return uncmcvar
@@ -306,9 +304,7 @@ class Dataset(object):
 		gt_mask, opts = nrrd.read(gt_mask_file)
 		gt_mask = np.asarray(gt_mask)
 		net_mask = np.asarray(net_mask)
-		
-		print('nseg file : ', net_mask_file)
-		print('gt file : ', gt_mask_file)
+	
 		#net_mask = net_mask[:,:,self._slice_idx]
 		#gt_mask = gt_mask[:,:,self._slice_idx]
 
