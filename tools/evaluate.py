@@ -52,8 +52,8 @@ def count_lesions(netseg, target, thresh):
         h_lesions = np.unique(labels['netseg'][labels['target'] == i])
         # All the voxels in this area contribute to detecting the lesion
         nb_overlap = netseg[labels['target'] == i].sum()
-        nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
         if nb_overlap >= 3 or nb_overlap >= 0.5 * gt_lesion_size:
+            nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
             ntp[utils.get_lesion_bin(gt_lesion_size)] += 1
             for h_lesion in h_lesions:
                 if h_lesion != 0:
@@ -111,7 +111,6 @@ def count_boxed_lesions(netbox, target, thresh, scores):
     """
     threshed_box_idxs = [x for x, val in enumerate(scores) if val > thresh]
     netbox = netbox[threshed_box_idxs]
-
     mask_target = np.zeros((target.shape[1], target.shape[2]))
     for lesion in range(target.shape[0]):
         mask_target += target[lesion]
@@ -132,7 +131,7 @@ def count_boxed_lesions(netbox, target, thresh, scores):
     nfn = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
     nb_les = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
     nles_gt = {'all': nles['target'], 'small': 0, 'med': 0, 'large': 0}
-
+   # print('Nles : ', nles['netbox'])
     # Go through ground truth boxes and count true positives/false negatives
     for i in range(1, nles['target'] + 1):
         # Find the intersect between gt_boxes for each netbox 
@@ -147,27 +146,29 @@ def count_boxed_lesions(netbox, target, thresh, scores):
             y1, x1, y2, x2 = netbox0[j]
             box_matrix[y1:y2, x1:x2] = 1
             intersect = box_matrix[labels['target'] == i].sum()
-            print('Intersect & Thresh : ', intersect, thresh)
             if intersect > 0:
                 h_lesions.append(j)
             box_matrix[y1:y2, x1:x2] = 0
         # All the voxels in this area contribute to detecting the lesion
         netbox_matrix = np.zeros((mask_target.shape[0], mask_target.shape[1]))
-        for i in range(nles['netbox']):
-            y1, x1, y2, x2 = netbox0[i]
+        for k in range(nles['netbox']):
+            y1, x1, y2, x2 = netbox0[k]
             netbox_matrix[y1:y2, x1:x2] = 1
         
         nb_overlap = netbox_matrix[labels['target'] == i].sum()
-
-        nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
+      
+        #print('Overlap : ', nb_overlap)
         if nb_overlap >= 3 or nb_overlap >= 0.5 * gt_lesion_size:
+            nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
             ntp[utils.get_lesion_bin(gt_lesion_size)] += 1
             for h_lesion in h_lesions:
                 if h_lesion != 0:
                     found_h[h_lesion - 1] = 0
         else:
             nfn[utils.get_box_lesion_bin(gt_lesion_size)] += 1
-
+    if nles_gt['all'] > 0:
+        print('ntp is : ', ntp)
+        print('gt nles is :', nles_gt)
     for i in range(0, nles['netbox']):
         y1, x1, y2, x2 = netbox0[i]
         netbox_matrix = np.zeros((mask_target.shape[0], mask_target.shape[1]))
@@ -181,13 +182,21 @@ def count_boxed_lesions(netbox, target, thresh, scores):
     nfp['all'] = nfp['small'] + nfp['med'] + nfp['large']
     nfn['all'] = nfn['small'] + nfn['med'] + nfn['large']
 
+
+    #print('nfn : ', nfn)
+    #print('ntp : ', ntp)
+    #print('nfp : ', nfp)
+    #print('Nles gt : ', nles_gt)
+    #print('nb les : ', nb_les)
+
+
     tpr = {}
     fdr = {}
     for s in ntp.keys():
         # tpr (sensitivity)
-        if nb_les[s] != 0:
-            tpr[s] = ntp[s] / nb_les[s]
-        elif nb_les[s] == 0 and ntp[s] == 0:
+        if nles_gt[s] != 0:
+            tpr[s] = ntp[s] / nles_gt[s]
+        elif nles_gt[s] == 0 and ntp[s] == 0:
             tpr[s] = 1
         else:
             tpr[s] = 0
@@ -200,6 +209,102 @@ def count_boxed_lesions(netbox, target, thresh, scores):
             ppv = 0
         fdr[s] = 1 - ppv
  
+    #print('tpr : ', tpr)
+    #print('fdr : ', fdr)
+
+    return {'ntp': ntp, 'nfp': nfp, 'nfn': nfn, 'fdr': fdr, 'tpr': tpr, 'nles': nb_les, 'nles_gt': nles_gt}
+
+def count_lesions_2D(netseg, target, thresh):
+    """
+    Connected component analysis of between prediction `h` and ground truth `t` across lesion bin sizes.
+    :param netseg: network output on range [0,1], shape=(NxMxO)
+    :type netseg: float16, float32, float64
+    :param target: ground truth labels, shape=(NxMxO)
+    :type target: int16
+    :param thresh: threshold to binarize prediction `h`
+    :type thresh: float16, float32, float64
+    :return: dict
+
+    **************** Courtesy of Tanya Nair ********************
+    """
+
+    netseg[netseg >= thresh] = 1
+    netseg[netseg < thresh] = 0
+    mask_target = np.zeros((target.shape[1], target.shape[2]))
+    for lesion in range(target.shape[0]):
+        mask_target += target[lesion]
+
+    # To Test netseg = gt_mask (should get ROC as tpr = 1 and fdr = 0 everywhere)
+    target, _ = utils.remove_tiny_les(mask_target, nvox=2)
+    netseg0 = netseg.copy()
+    #netseg = ndimage.binary_dilation(netseg, structure=ndimage.generate_binary_structure(2, 2))
+    labels = {}
+    nles = {}
+    labels['target'], nles['target'] = ndimage.label(target)
+    labels['netseg'], nles['netseg'] = ndimage.label(netseg)
+    found_h = np.ones(nles['netseg'], np.int16)
+    ntp = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
+    nfp = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
+    nfn = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
+    nb_les = {'all': 0, 'small': 0, 'med': 0, 'large': 0}
+    nles_gt = {'all': nles['target'], 'small': 0, 'med': 0, 'large': 0}
+
+    # Go through ground truth segmentation masks and count true positives/false negatives
+    for i in range(1, nles['target'] + 1):
+        gt_lesion_size = np.sum(target[labels['target'] == i])
+        nles_gt[utils.get_lesion_bin(gt_lesion_size)] += 1
+        # List of detected lesions in this area
+        h_lesions = np.unique(labels['netseg'][labels['target'] == i])
+        # All the voxels in this area contribute to detecting the lesion
+        nb_overlap = netseg[labels['target'] == i].sum()
+        if nb_overlap >= 3 or nb_overlap >= 0.5 * gt_lesion_size:
+            nb_les[utils.get_lesion_bin(gt_lesion_size)] += 1
+            ntp[utils.get_lesion_bin(gt_lesion_size)] += 1
+            for h_lesion in h_lesions:
+                if h_lesion != 0:
+                    found_h[h_lesion - 1] = 0
+        else:
+            nfn[utils.get_lesion_bin(gt_lesion_size)] += 1
+
+    for i in range(1, nles['netseg'] + 1):
+        nb_vox = np.sum(netseg0[labels['netseg'] == i])
+        if found_h[i - 1] == 1:
+            nfp[utils.get_lesion_bin(nb_vox)] += 1
+
+    nb_les['all'] = nb_les['small'] + nb_les['med'] + nb_les['large']
+    ntp['all'] = ntp['small'] + ntp['med'] + ntp['large']
+    nfp['all'] = nfp['small'] + nfp['med'] + nfp['large']
+    nfn['all'] = nfn['small'] + nfn['med'] + nfn['large']
+
+    tpr = {}
+    fdr = {}
+    for s in ntp.keys():
+        # tpr (sensitivity)
+        if nles_gt[s] != 0:
+            tpr[s] = ntp[s] / nles_gt[s]
+        elif nles_gt[s] == 0 and ntp[s] == 0:
+            tpr[s] = 1
+        else:
+            tpr[s] = 0
+        # ppv (1-fdr)
+        if ntp[s] + nfp[s] != 0:
+            ppv = ntp[s] / (ntp[s] + nfp[s])
+        elif ntp[s] == 0:
+            ppv = 1
+        else:
+            ppv = 0
+        fdr[s] = 1 - ppv
+    
+    if nles_gt['all'] > 0:
+        print('Number of lesions : ', nb_les)
+        print('Number of gt lesions : ', nles_gt)
+        print('Number true positives : ', ntp)
+        print('Number of false positives : ', nfp)
+        print('Number of false negatives : ', nfn)
+
+        print('TPR : ', tpr)
+        print('FDR : ', fdr)
+    
     return {'ntp': ntp, 'nfp': nfp, 'nfn': nfn, 'fdr': fdr, 'tpr': tpr, 'nles': nb_les, 'nles_gt': nles_gt}
 
 

@@ -50,11 +50,11 @@ def get_lesion_bin(nvox):
 
 def get_box_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-	if 3 <= nvox <= 20:
+	if 3 <= nvox <= 81:
 		return 'small'
-	elif 20 < nvox <= 45:
+	elif 81 < nvox <= 169:
 		return 'med'
-	elif nvox > 45:
+	elif nvox > 169:
 		return 'large'
 	else:
 		return 'small'
