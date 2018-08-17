@@ -17,21 +17,12 @@ import os
 # the configurations you need to change.
 
 class Config(object):
-    """Base configuration class. For custom configurations, create a
-    sub-class that inherits from this one and override properties
-    that need to be changed.
-    """
-    # Name the configurations. For example, 'COCO', 'Experiment 3', ...etc.
-    # Useful if your code needs to do things differently depending on which
-    # experiment is running.
-    NAME = None  # Override in sub-classes
-
     # Path to pretrained imagenet model
     IMAGENET_MODEL_PATH = os.path.join(os.getcwd(), "resnet50_imagenet.pth")
 
     # Path to pretrained model
     #CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training3(t2_stack)/', "mask_rcnn_lesion_mask_rcnn_0025.pth")
-    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0075.pth")
+    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0100.pth")
     
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
@@ -100,7 +91,7 @@ class Config(object):
     # be satisfied together the IMAGE_MAX_DIM is enforced.
     IMAGE_MIN_DIM = 56
     IMAGE_MAX_DIM = 192
-    
+
     # If True, pad images with zeros such that they're (max_dim by max_dim)
     IMAGE_PADDING = True  # currently, the False option is not supported
 

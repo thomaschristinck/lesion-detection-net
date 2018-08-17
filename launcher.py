@@ -60,7 +60,7 @@ class DataConfig(Config):
 	# Adjust down if you use a smaller GPU.
 	IMAGES_PER_GPU = 16
 
-	# Uncomment to train on 8 GPUs (default is 1)
+	# Uncomment to train on more GPUs (default is 1)
 	# GPU_COUNT = 8
 
 	# Number of classes (including background). Small, medium, and large lesions (each is a 'class')
@@ -85,7 +85,7 @@ class MSDataset(utils.Dataset):
 		self._slice_idx = 0
 		if config.get('dim') == 2:
 			#Going to just try looking at a random slice for now
-			slice_idx = random.randint(20,45)
+			slice_idx = random.randint(0,63)
 			self._slice_idx = slice_idx
 		else:
 			slice_idx = ...  
@@ -101,7 +101,7 @@ class MSDataset(utils.Dataset):
 		elif self._mode == 'val':
 			self._image_ids = self._image_ids[train_idx:valid_idx]
 		elif self._mode == 'test':
-			self._image_ids = self._image_ids[valid_idx:valid_idx + (7 * 20)]
+			self._image_ids = self._image_ids[valid_idx:valid_idx + (7 * 25)]
 
 		# Build (or rebuild) everything else from the info dicts.
 		self.num_images = int(len(self._image_ids) / 8)
@@ -193,73 +193,41 @@ if __name__ == '__main__':
 		dataset_val = MSDataset()
 		dataset_val.load_data(args.dataset, {'mode': 'val', 'shuffle': False, 'dim': config.BRAIN_DIMENSIONS, 'mods': config.MODALITIES})
 
-		'''
 		# Training - Stage 1
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE,
-					epochs=10,
-					layers='heads')
-
-		# Training - Stage 2
-		print("Fine tune Resnet stage 4 and up")
-		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE,
-					epochs=15,
-					layers='4+')
-
-		# Training - Stage 3
-		print("Training network heads")
-		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE,
+					learning_rate=config.LEARNING_RATE / 10,
 					epochs=30,
 					layers='heads')
-		'''
-		# Training - Stage 1
-		print("Training network heads")
-		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE,
-					epochs=10,
-					layers='heads')
 
 		# Training - Stage 2
 		print("Fine tune Resnet stage 4 and up")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE,
-					epochs=20,
+					learning_rate=config.LEARNING_RATE / 10,
+					epochs=60,
 					layers='4+')
 
 		# Training - Stage 3
-		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE, #Changed from /10
-					epochs=35,
+					learning_rate=config.LEARNING_RATE / 10, #Changed from /10
+					epochs=85,
 					layers='all')
 		
 		# Training - Stage 4
-		# Network heads
-		print("Fine tune all layers")
+		print("Train Network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10, #Changed from /10
-					epochs=50,
+					learning_rate=config.LEARNING_RATE / 100, #Changed from /10
+					epochs=110,
 					layers='heads')
 
 		# Training - Stage 5
-		# Fine tune all layers
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10, #Changed from /10
-					epochs=60,
+					learning_rate=config.LEARNING_RATE / 100, #Changed from /10
+					epochs=140,
 					layers='all')
 
-		# Training - Stage 6
-		# Fine tune all layers
-		print("Fine tune all layers (learning rate further reduced)")
-		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 50 , #Changed from /10
-					epochs=70,
-					layers='all')
 
 	elif args.command == "evaluate":
 		# Test dataset
@@ -271,8 +239,8 @@ if __name__ == '__main__':
 		# Evaluate the model (produce TPR/FPR graphs)
 		#model.evaluate_model_segmentation_by_slice(dataset_test, args.logs)
 		#model.evaluate_model_detection(dataset_test, args.logs)
-		model.evaluate_model_segmentation_holistic(dataset_test, args.logs)
-		#model.evaluate_model_detection_holistic(dataset_test, args.logs)
+		#model.evaluate_model_segmentation_holistic(dataset_test, args.logs)
+		model.evaluate_model_detection_holistic(dataset_test, args.logs)
 
 	
 		

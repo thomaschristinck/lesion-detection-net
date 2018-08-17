@@ -2280,7 +2280,7 @@ class MaskRCNN(nn.Module):
 					a = copy.copy(netseg[...,slice_idx])
 					b = copy.copy(gt_masks[...,slice_idx])
 
-					lesion_stats = evaluate.count_lesions_2D(netseg=a.astype(np.float32), target=b.astype(np.int16), thresh=thr)
+					lesion_stats = evaluate.count_segmented_lesions(netseg=a.astype(np.float32), target=b.astype(np.int16), thresh=thr)
 					#print('i, j : ', i, j)
 					tpr_lesions[i, j] += lesion_stats['tpr']['all']
 					fdr_lesions[i, j] += lesion_stats['fdr']['all']
