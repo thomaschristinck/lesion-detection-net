@@ -420,6 +420,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     return ax
 
 def plot_loss(loss, val_loss, save=True, log_dir=None):
+# Plots the loss by loss function as well as the overall loss
     loss = np.array(loss)
     val_loss = np.array(val_loss)
 

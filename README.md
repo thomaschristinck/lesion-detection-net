@@ -1,7 +1,9 @@
 ===========================================
 Lesion Detection Net
 ===========================================
-This is a pytorch implementation of Mask R-CNN that is largely based on multimodallearning's [pytorch-mask-rcnn](https://github.com/multimodallearning/pytorch-mask-rcnn) (a pytorch implementation) and matterport's [Mask_RCNN](https://github.com/matterport/Mask_RCNN).
+This is a pytorch implementation of Mask R-CNN that is largely based on multimodallearning's [pytorch-mask-rcnn](https://github.com/multimodallearning/pytorch-mask-rcnn) (a pytorch implementation) and matterport's [Mask_RCNN](https://github.com/matterport/Mask_RCNN). I also use the non-maximum suppression implementation (Faster R-CNN) from ruotianluo's [pytorch-faster-rcnn](https://github.com/ruotianluo/pytorch-faster-rcnn) and longcw's [RoiAlign](https://github.com/longcw/RoIAlign.pytorch).
+
+The Mask R-CNN paper by He et al. can be found [here](https://arxiv.org/abs/1703.06870) and the Faster R-CNN paper by Ren et al. can be found [here](https://arxiv.org/abs/1506.01497).
 
 I am also working on a 3D Implementation of this repository.
 
