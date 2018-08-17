@@ -1179,9 +1179,9 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	defined in MINI_MASK_SHAPE.
 	"""
 	# Load t2 image, uncertainties, and mask
-	t2_image = dataset.load_t2_image(image_id, dataset, config)
-	uncmcvar = dataset.load_uncertainty(image_id, dataset, config)
-	net_mask, gt_mask, class_ids, nles = dataset.load_masks(image_id, dataset, config)
+	t2_image = dataset.load_t2_image(image_id, dataset, config, mode)
+	uncmcvar = dataset.load_uncertainty(image_id, dataset, config, mode)
+	net_mask, gt_mask, class_ids, nles = dataset.load_masks(image_id, dataset, config, mode)
 
 	if mode == 'test':
 		return net_mask, gt_mask, t2_image, uncmcvar
@@ -2094,7 +2094,7 @@ class MaskRCNN(nn.Module):
 		plt.legend(loc="lower right")
 		plt.xlabel('fdr')
 		plt.ylabel('tpr')
-		plt.title('Uncertainty U-Net ROC')
+		plt.title('Baseline U-Net Segmentation')
 		major_ticks = np.arange(0, 1, 0.1)
 		minor_ticks = np.arange(0, 1, 0.02)
 		ax.set_xticks(major_ticks)
@@ -2122,17 +2122,17 @@ class MaskRCNN(nn.Module):
 		nb_img_valid = len(dataset._image_ids)
 		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 1.0, 1.1]
 		nb_thrs = len(thresholds)
-		fpr = np.empty((nb_img_valid, nb_thrs))
-		tpr = np.empty((nb_img_valid, nb_thrs))
-		fdr = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_s = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_s = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_m = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_m = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_l = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+		fpr = np.zeros((nb_img_valid, nb_thrs))
+		tpr = np.zeros((nb_img_valid, nb_thrs))
+		fdr = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
 
 		i = 0
 		for inputs in test_generator:
@@ -2184,10 +2184,12 @@ class MaskRCNN(nn.Module):
 					fdr_lesions_l[i, j] += lesion_stats['fdr']['large']
 			
 
-				#print("\n tpr-lesion s :", tpr_lesions_s[i])
-				#print("\n fdr-lesion s :", fdr_lesions_s[i])
-				#print("\n tpr-lesion l :", tpr_lesions_l[i])
-				#print("\n fdr-lesion l :", fdr_lesions_l[i])
+			print("\n tpr-lesion s :", tpr_lesions_s[i])
+			print("\n fdr-lesion s :", fdr_lesions_s[i])
+			print("\n tpr-lesion m :", tpr_lesions_m[i])
+			print("\n fdr-lesion m :", fdr_lesions_m[i])
+			print("\n tpr-lesion l :", tpr_lesions_l[i])
+			print("\n fdr-lesion l :", fdr_lesions_l[i])
 			i +=1
 		
 		#print("\n fdr-lesion s :", fdr_lesions_s)
@@ -2227,7 +2229,7 @@ class MaskRCNN(nn.Module):
 		plt.legend(loc="lower right")
 		plt.xlabel('fdr')
 		plt.ylabel('tpr')
-		plt.title('Detection Net ROC')
+		plt.title('Detection Net (averaged across slices)')
 		major_ticks = np.arange(0, 1, 0.1)
 		minor_ticks = np.arange(0, 1, 0.02)
 		ax.set_xticks(major_ticks)
@@ -2249,17 +2251,17 @@ class MaskRCNN(nn.Module):
 		nb_img_valid = len(dataset._image_ids)
 		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 1.0, 1.1]
 		nb_thrs = len(thresholds)
-		fpr = np.empty((nb_img_valid, nb_thrs))
-		tpr = np.empty((nb_img_valid, nb_thrs))
-		fdr = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_s = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_s = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_m = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_m = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_l = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+		fpr = np.zeros((nb_img_valid, nb_thrs))
+		tpr = np.zeros((nb_img_valid, nb_thrs))
+		fdr = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
 
 		i = 0
 		for inputs in test_generator:
@@ -2337,7 +2339,7 @@ class MaskRCNN(nn.Module):
 		plt.legend(loc="lower right")
 		plt.xlabel('fdr')
 		plt.ylabel('tpr')
-		plt.title('Uncertainty U-Net ROC (by slice)')
+		plt.title('U-Net Segmentation (averaged across slices)')
 		major_ticks = np.arange(0, 1, 0.1)
 		minor_ticks = np.arange(0, 1, 0.02)
 		ax.set_xticks(major_ticks)
@@ -2366,17 +2368,17 @@ class MaskRCNN(nn.Module):
 		nb_img_valid = len(dataset._image_ids)
 		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 1.0, 1.1]
 		nb_thrs = len(thresholds)
-		fpr = np.empty((nb_img_valid, nb_thrs))
-		tpr = np.empty((nb_img_valid, nb_thrs))
-		fdr = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_s = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_s = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_m = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_m = np.empty((nb_img_valid, nb_thrs))
-		fdr_lesions_l = np.empty((nb_img_valid, nb_thrs))
-		tpr_lesions_l = np.empty((nb_img_valid, nb_thrs))
+		fpr = np.zeros((nb_img_valid, nb_thrs))
+		tpr = np.zeros((nb_img_valid, nb_thrs))
+		fdr = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
 
 		i = 0
 		for inputs in test_generator:
@@ -2390,13 +2392,13 @@ class MaskRCNN(nn.Module):
 			unc = unc[0].numpy()
 
 			# We have a dict with array for each size
-			ntp = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
-			nfp = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
-			nfn = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
-			fdr = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
-			tpr = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
-			nb_les = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
-			nles_gt = {'all': np.empty((nb_img_valid, nb_thrs)), 'small': np.empty((nb_img_valid, nb_thrs)), 'med': np.empty((nb_img_valid, nb_thrs)), 'large': np.empty((nb_img_valid, nb_thrs))}
+			ntp = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nfp = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nfn = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			fdr = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			tpr = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nb_les = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nles_gt = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
 
 			# First stack slices to make the input image
 			image = np.stack([t2, unc, netseg], axis = 0)
@@ -2429,14 +2431,7 @@ class MaskRCNN(nn.Module):
 						nfn[size][i, j] += lesion_stats['nfn'][size]
 						nb_les[size][i, j] += lesion_stats['nles'][size]
 						nles_gt[size][i, j] += lesion_stats['nles_gt'][size]
-			print('Nles_gt : ', nles_gt['all'][i])
-			print('NTP : ', ntp['all'][i])
-			print('Nles_gt l : ', nles_gt['large'][i])
-			print('NTP l: ', ntp['large'][i])
-			print('Nles_gt m: ', nles_gt['med'][i])
-			print('NTP m: ', ntp['med'][i])
-			print('Nles_gt s: ', nles_gt['small'][i])
-			print('NTP s: ', ntp['small'][i])
+		
 			# Now for each threshold, we want to figure out the fdr/tpr 
 			for j, thr in enumerate(thresholds):
 				for s in ntp.keys():
@@ -2457,8 +2452,8 @@ class MaskRCNN(nn.Module):
 					fdr[s][i,j] = 1 - ppv
 
 
-				tpr_lesions_s[i, j] = tpr['all'][i,j]
-				fdr_lesions_s[i, j] = fdr['all'][i,j]
+				tpr_lesions[i, j] = tpr['all'][i,j]
+				fdr_lesions[i, j] = fdr['all'][i,j]
 
 				tpr_lesions_s[i, j] = tpr['small'][i,j]
 				fdr_lesions_s[i, j] = fdr['small'][i,j]
@@ -2499,7 +2494,7 @@ class MaskRCNN(nn.Module):
 		plt.legend(loc="lower right")
 		plt.xlabel('fdr')
 		plt.ylabel('tpr')
-		plt.title('Detection Net ROC')
+		plt.title('Detection Net (per slice boxes)')
 		major_ticks = np.arange(0, 1, 0.1)
 		minor_ticks = np.arange(0, 1, 0.02)
 		ax.set_xticks(major_ticks)
@@ -2510,6 +2505,148 @@ class MaskRCNN(nn.Module):
 		ax.grid(which='minor', alpha=0.2)
 		ax.grid(which='major', alpha=0.5)
 		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve_detection(by volume).png"))
+	
+
+	def evaluate_model_segmentation_holistic(self, dataset, logs, nb_mc=10):
+		# Changes : in evaluate
+		# Filter out 4 voxel lesions (from 2)
+		# gen lesion size bins for boxed lesions
+		# gt_lesion bin is determined from get_lesion_size() (instead of get_lesion_box_size())
+		test_set = Dataset(dataset, self.config, mode='test', augment=True)
+		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
+
+		nb_img_valid = len(dataset._image_ids)
+		thresholds = [0.0001, 0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 1.0, 1.1]
+		nb_thrs = len(thresholds)
+		fpr = np.zeros((nb_img_valid, nb_thrs))
+		tpr = np.zeros((nb_img_valid, nb_thrs))
+		fdr = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_s = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_m = np.zeros((nb_img_valid, nb_thrs))
+		fdr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
+		tpr_lesions_l = np.zeros((nb_img_valid, nb_thrs))
+
+		i = 0
+		for inputs in test_generator:
+			netseg = inputs[0]
+			gt_masks = inputs[1]
+			t2 = inputs[2]
+			unc = inputs[3]
+			netseg = netseg[0].numpy()
+			gt_masks = gt_masks[0].numpy()
+			t2 = t2[0].numpy()
+			unc = unc[0].numpy()
+
+			# We have a dict with array for each size
+			ntp = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nfp = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nfn = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			fdr = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			tpr = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nb_les = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			nles_gt = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
+			print("{}-th brain...".format(i+1))
+			for slice_idx in range(t2.shape[2]):#image.shape[3]
+				for j, thr in enumerate(thresholds):
+					# Now go through all the thresholds for a slice. We add the stats for each volume (because lesion stats are on a per 
+					# slice basis) and then the stats are averaged across all volumes
+					y_pred_3d = netseg 
+					y_true_3d = gt_masks
+
+					import copy
+				
+					a = copy.copy(netseg[...,slice_idx])
+					b = copy.copy(gt_masks[...,slice_idx])
+
+					lesion_stats = evaluate.count_segmented_lesions_as_boxes(netseg=a.astype(np.float32), target=b.astype(np.int16), thresh=thr)
+					
+					for size in ntp.keys():
+						ntp[size][i, j] += lesion_stats['ntp'][size]
+						nfp[size][i, j] += lesion_stats['nfp'][size]
+						nfn[size][i, j] += lesion_stats['nfn'][size]
+						nb_les[size][i, j] += lesion_stats['nles'][size]
+						nles_gt[size][i, j] += lesion_stats['nles_gt'][size]
+		
+			# Now for each threshold, we want to figure out the fdr/tpr 
+			for j, thr in enumerate(thresholds):
+				for s in ntp.keys():
+					# tpr (sensitivity)
+					if nles_gt[s][i,j] != 0:
+						tpr[s][i,j] = ntp[s][i,j] / nles_gt[s][i,j]
+					elif nles_gt[s][i,j] == 0 and ntp[s][i,j] == 0:
+						tpr[s][i,j] = 1
+					else:
+						tpr[s][i,j] = 0
+					# ppv (1-fdr)
+					if ntp[s][i,j] + nfp[s][i,j] != 0:
+						ppv = ntp[s][i,j] / (ntp[s][i,j] + nfp[s][i,j])
+					elif ntp[s][i,j] == 0:
+						ppv = 1
+					else:
+						ppv = 0
+					fdr[s][i,j] = 1 - ppv
+
+
+				tpr_lesions[i, j] = tpr['all'][i,j]
+				fdr_lesions[i, j] = fdr['all'][i,j]
+
+				tpr_lesions_s[i, j] = tpr['small'][i,j]
+				fdr_lesions_s[i, j] = fdr['small'][i,j]
+				
+				tpr_lesions_m[i, j] = tpr['med'][i,j]
+				fdr_lesions_m[i, j] = fdr['med'][i,j]
+				
+				tpr_lesions_l[i, j] = tpr['large'][i,j]
+				fdr_lesions_l[i, j] = fdr['large'][i,j]
+			
+			print("\n tpr-lesion s :", tpr_lesions_s[i])
+			print("\n fdr-lesion s :", fdr_lesions_s[i])
+			print("\n tpr-lesion l :", tpr_lesions_l[i])
+			print("\n fdr-lesion l :", fdr_lesions_l[i])
+			i +=1
+		
+		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
+		tpr_lesions_mean = np.mean(tpr_lesions, axis=0)
+		
+		fdr_lesions_mean_s = np.mean(fdr_lesions_s, axis=0)
+		tpr_lesions_mean_s = np.mean(tpr_lesions_s, axis=0)
+
+		fdr_lesions_mean_m = np.mean(fdr_lesions_m, axis=0)
+		tpr_lesions_mean_m = np.mean(tpr_lesions_m, axis=0)
+
+		fdr_lesions_mean_l = np.mean(fdr_lesions_l, axis=0)
+		tpr_lesions_mean_l = np.mean(tpr_lesions_l, axis=0)
+
+		print("\n tpr-lesion-mean s:", tpr_lesions_mean)
+		print("\n fdr-lesion-mean s:", fdr_lesions_mean)
+
+		print("\n tpr-lesion-mean s:", tpr_lesions_mean_s)
+		print("\n fdr-lesion-mean s:", fdr_lesions_mean_s)
+
+		fig = plt.figure()
+		ax = fig.add_subplot(1, 1, 1) 
+		plt.plot(fdr_lesions_mean, tpr_lesions_mean, label='lesion level-all')
+		plt.plot(fdr_lesions_mean_s, tpr_lesions_mean_s, label='lesion level-small')
+		plt.plot(fdr_lesions_mean_m, tpr_lesions_mean_m, label='lesion level-med')
+		plt.plot(fdr_lesions_mean_l, tpr_lesions_mean_l, label='lesion level-large') 
+		plt.legend(loc="lower right")
+		plt.xlabel('fdr')
+		plt.ylabel('tpr')
+		plt.title('Segmentation Net (as per-slice boxes)')
+		major_ticks = np.arange(0, 1, 0.1)
+		minor_ticks = np.arange(0, 1, 0.02)
+		ax.set_xticks(major_ticks)
+		ax.set_xticks(minor_ticks, minor=True)
+		ax.set_yticks(major_ticks)
+		ax.set_yticks(minor_ticks, minor=True)
+		ax.grid(which='both')
+		ax.grid(which='minor', alpha=0.2)
+		ax.grid(which='major', alpha=0.5)
+		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve_segmentation(as box by volume).png"))
 	
 
 	def mold_inputs(self, images):

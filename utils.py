@@ -50,14 +50,27 @@ def get_lesion_bin(nvox):
 
 def get_box_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-	if 3 <= nvox <= 81:
+	if 3 <= nvox <= 100:
 		return 'small'
-	elif 81 < nvox <= 169:
+	elif 100 < nvox <= 225:
 		return 'med'
-	elif nvox > 169:
+	elif nvox > 225:
 		return 'large'
 	else:
 		return 'small'
+
+
+def get_box_lesion_bin_gen(nvox):
+	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
+	if 3 <= nvox <= 135:
+		return 'small'
+	elif 135 < nvox <= 300:
+		return 'med'
+	elif nvox > 300:
+		return 'large'
+	else:
+		return 'small'
+
 
 def remove_tiny_les(lesion_image, nvox=2):
 	labels, nles = ndimage.label(lesion_image)
@@ -262,7 +275,7 @@ class Dataset(object):
 	def __init__(self, class_map=None):
 		self._image_ids = []
 
-	def load_t2_image(self, image_id, dataset, config):
+	def load_t2_image(self, image_id, dataset, config, mode):
 		"""Load the specified image and return a [H,W] Numpy array.
 		"""
 		# CHANGE LATER: Update slice index
@@ -274,11 +287,13 @@ class Dataset(object):
 		
 		t2_file = join(dataset._dir, dataset._image_list[t2_idx])
 		t2, opts = nrrd.read(t2_file)
-		#t2 = np.asarray(t2)[:,:,self._slice_idx]
-	 
+
+		if mode == 'train' or mode == 'val':
+			t2 = np.asarray(t2)[:,:,self._slice_idx]
+		
 		return t2
 
-	def load_uncertainty(self, image_id, dataset, config):
+	def load_uncertainty(self, image_id, dataset, config, mode):
 		"""Load the specified image's associated uncertainty measures and return 4 [H,W] Numpy arrays.
 		"""
 		# Get indices
@@ -288,10 +303,13 @@ class Dataset(object):
 		uncmcvar_idx = int((image_id) * nb_mods + 4) # + 5
 		uncmcvar_file = join(dataset._dir, dataset._image_list[uncmcvar_idx])
 		uncmcvar, opts = nrrd.read(uncmcvar_file)
-		#uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
+
+		if mode == 'train' or mode == 'val':
+			uncmcvar = np.asarray(uncmcvar)[:,:,self._slice_idx]
+		
 		return uncmcvar
 
-	def load_masks(self, image_id, dataset, config):
+	def load_masks(self, image_id, dataset, config, mode):
 		"""Load lesion masks for the given image (ground truth and network output)
 		"""
 		# Get indices
@@ -305,36 +323,65 @@ class Dataset(object):
 		gt_mask = np.asarray(gt_mask)
 		net_mask = np.asarray(net_mask)
 	
-		#net_mask = net_mask[:,:,self._slice_idx]
-		#gt_mask = gt_mask[:,:,self._slice_idx]
+		if mode == 'train' or mode == 'val':
 
-		# Remove small lesions
-		gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
+			net_mask = net_mask[:,:,self._slice_idx]
+			gt_mask = gt_mask[:,:,self._slice_idx]
+
+			# Remove small lesions
+			gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=1)
 		
-		# Return a mask for each lesion instance
-		labels, nles = ndimage.label(gt_mask)
-		gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
-		#gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+			# Return a mask for each lesion instance
+			labels, nles = ndimage.label(gt_mask)
+			gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
 
-		# Check if there are no lesions
+			# Check if there are no lesions
 
-		if nles == 0:
-			gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
-			#gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
-			gt_masks[0] = gt_mask
+			if nles == 0:
+				gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1]], dtype=np.int32)
+				gt_masks[0] = gt_mask
 
-		# Look for all the voxels associated with a particular lesion
+			# Look for all the voxels associated with a particular lesion
 
-		for i in range(1, nles + 1):
+			for i in range(1, nles + 1):
 		
-			gt_mask[labels != i] = 0
-			gt_mask[labels == i] = 1
-			gt_masks[i-1] = gt_mask
+				gt_mask[labels != i] = 0
+				gt_mask[labels == i] = 1
+				gt_masks[i-1] = gt_mask
 
-		gt_masks = gt_masks.transpose(1, 2, 3, 0)
-		#gt_masks = gt_masks.transpose(1, 2, 0)
+			gt_masks = gt_masks.transpose(1, 2, 0)
+			return net_mask, gt_masks, class_ids, nles
 
-		return net_mask, gt_masks, class_ids, nles
+		else:
+
+			# Remove small lesions
+			gt_mask, class_ids = remove_tiny_les(gt_mask, nvox=2)
+		
+			# Return a mask for each lesion instance
+			labels, nles = ndimage.label(gt_mask)
+			gt_masks = np.zeros([nles, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+
+			# Check if there are no lesions
+
+			if nles == 0:
+				gt_masks = np.zeros([1, gt_mask.shape[0], gt_mask.shape[1], gt_mask.shape[2]], dtype=np.int32)
+				gt_masks[0] = gt_mask
+
+			# Look for all the voxels associated with a particular lesion
+
+			for i in range(1, nles + 1):
+		
+				gt_mask[labels != i] = 0
+				gt_mask[labels == i] = 1
+				gt_masks[i-1] = gt_mask
+
+			gt_masks = gt_masks.transpose(1, 2, 3, 0)
+			return net_mask, gt_masks, class_ids, nles
+
+
+##############################################################
+# Formatting
+##############################################################
 
 def resize_image(image, min_dim=None, max_dim=None, padding=False, dims=2):
 	"""
@@ -538,7 +585,6 @@ def generate_pyramid_anchors(scales, ratios, feature_shapes, feature_strides,
 		first, then anchors of scale[1], and so on.
 	"""
 	# Anchors
-	# [anchor_count, (y1, x1, y2, x2)]
 	anchors = []
 	for i in range(len(scales)):
 		anchors.append(generate_anchors(scales[i], ratios, feature_shapes[i],
