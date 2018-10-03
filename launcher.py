@@ -196,35 +196,35 @@ if __name__ == '__main__':
 		# Training - Stage 1
 		print("Training network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10,
+					learning_rate=config.LEARNING_RATE / 100,
 					epochs=30,
 					layers='heads')
 
 		# Training - Stage 2
 		print("Fine tune Resnet stage 4 and up")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10,
+					learning_rate=config.LEARNING_RATE / 100,
 					epochs=60,
 					layers='4+')
 
 		# Training - Stage 3
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 10, #Changed from /10
+					learning_rate=config.LEARNING_RATE / 1000, #Changed from /10
 					epochs=85,
 					layers='all')
 		
 		# Training - Stage 4
 		print("Train Network heads")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 100, #Changed from /10
+					learning_rate=config.LEARNING_RATE / 1000, #Changed from /10
 					epochs=110,
 					layers='heads')
 
 		# Training - Stage 5
 		print("Fine tune all layers")
 		model.train_model(dataset_train, dataset_val,
-					learning_rate=config.LEARNING_RATE / 100, #Changed from /10
+					learning_rate=config.LEARNING_RATE / 1000, #Changed from /10
 					epochs=140,
 					layers='all')
 
@@ -240,7 +240,7 @@ if __name__ == '__main__':
 		#model.evaluate_model_segmentation_by_slice(dataset_test, args.logs)
 		#model.evaluate_model_detection(dataset_test, args.logs)
 		#model.evaluate_model_segmentation_holistic(dataset_test, args.logs)
-		model.evaluate_model_detection_holistic(dataset_test, args.logs)
+		model.evaluate_model_detection_holistic(dataset_test)
 
 	
 		

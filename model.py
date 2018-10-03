@@ -31,8 +31,6 @@ import utils
 from tools import evaluate
 import visualize
 from nms.nms_wrapper import nms
-import sklearn
-from sklearn.metrics import roc_curve
 from roialign.roi_align.crop_and_resize import CropAndResizeFunction
 from timeit import default_timer as timer
 
@@ -45,9 +43,9 @@ plt.style.use('bmh')
 ############################################################
 
 def log(text, array=None):
-	"""Prints a text message. And, optionally, if a Numpy array is provided it
-	prints it's shape, min, and max values.
-	"""
+	# Prints a text message. And, optionally, if a Numpy array is provided it
+	# prints it's shape, min, and max values.
+
 	if array is not None:
 		text = text.ljust(25)
 		text += ("shape: {:20}  min: {:10.5f}  max: {:10.5f}".format(
@@ -393,9 +391,12 @@ def proposal_layer(inputs, proposal_count, nms_threshold, anchors, config=None):
 	# for small objects, so we're skipping it.
 
 	# Non-max suppression
-	keep = nms(torch.cat((boxes, scores.unsqueeze(1)), 1).data, nms_threshold)
+	print("Boxes before nms : ", boxes.shape)
+	#keep = nms(torch.cat((boxes, scores.unsqueeze(1)), 1).data, nms_threshold)
+	keep = box_nms(boxes, scores, nms_threshold)
 	keep = keep[:proposal_count]
 	boxes = boxes[keep, :]
+	print("Boxes after nms : ", boxes.shape)
 
 	# Normalize dimensions to range of 0 to 1.
 	norm = Variable(torch.from_numpy(np.array([height, width, height, width])).float(), requires_grad=False)
@@ -408,7 +409,56 @@ def proposal_layer(inputs, proposal_count, nms_threshold, anchors, config=None):
 
 	return normalized_boxes
 
+def box_nms(bboxes, scores, threshold=0.5):
+# Malisiewicz et al.
 
+    '''Non maximum suppression.
+    Args:
+      bboxes: (tensor) bounding boxes, sized [N,4].
+      scores: (tensor) bbox scores, sized [N,].
+      threshold: (float) overlap threshold.
+      mode: (str) 'union' or 'min'.
+    Returns:
+      keep: (tensor) selected indices.
+    Reference:
+      https://github.com/rbgirshick/py-faster-rcnn/blob/master/lib/nms/py_cpu_nms.py
+    '''
+    x1 = bboxes[:,0]
+    y1 = bboxes[:,1]
+    x2 = bboxes[:,2]
+    y2 = bboxes[:,3]
+
+    areas = (x2-x1+1) * (y2-y1+1)
+    _, order = scores.sort(0, descending=True)
+
+    keep = []
+    while order.numel() > 0:
+        i = order[0]
+        keep.append(i)
+
+        if order.numel() == 1:
+            break
+
+        print('x1 order :', x1.data)
+        print('min index :', (int)(i.data.cpu().numpy()))
+        x = x1.data.cpu()
+        h = (int)(i.data.cpu().numpy())
+        print('min index 2 :', x1[h].data.cpu().numpy())
+        print('min index :', x1[0])
+        xx1 = torch.clamp(x1[order[1:]], min=(int)(x1[h].data.cpu().numpy()))
+        yy1 = torch.clamp(y1[order[1:]], min=(int)(y1[h].data.cpu().numpy()))
+        xx2 = torch.clamp(x2[order[1:]], max=(int)(x2[h].data.cpu().numpy()))
+        yy2 = torch.clamp(y2[order[1:]], max=(int)(y2[h].data.cpu().numpy()))
+
+        w = (xx2-xx1+1).clamp(min=0)
+        h = (yy2-yy1+1).clamp(min=0)
+        inter = w*h
+        ovr = inter / (areas[i] + areas[order[1:]] - inter)
+        ids = (ovr<=threshold).nonzero().squeeze()
+        if ids.numel() == 0:
+            break
+        order = order[ids+1]
+    return torch.LongTensor(keep)
 ############################################################
 #  ROIAlign Layer
 ############################################################
@@ -1216,7 +1266,7 @@ def load_image_gt(dataset, config, image_id, augment=False,
 	# Bounding boxes. Note that some boxes might be all zeros
 	# if the corresponding mask got cropped out 
 	# bbox: [num_instances, (y1, x1, y2, x2)]
-	bbox = utils.extract_bboxes(gt_mask, dims, buf = 2)
+	bbox = utils.extract_bboxes(gt_mask, dims, buf = 3)
 
 	# TODO: Resize masks to smaller size to reduce memory usage
 	# if use_mini_mask:
@@ -2106,7 +2156,17 @@ class MaskRCNN(nn.Module):
 		ax.grid(which='major', alpha=0.5)
 		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve_segmentation.png")) 
 
-	def evaluate_model_detection(self, dataset, logs, nb_mc=10):
+	def evaluate_model_detection(self, dataset):
+		#	Evaluate_model_detection - a lot of this function is borrowed from Nazanine/Tanya. Basically we
+		#	evaluate detection performance on a per-slice basis across the volumes in 'dataset' and then average the
+		# 	performance across volumes. We use this average to report the TPR vs FDR across size bins and plot
+		#	this result
+		#	Inputs:
+		#	dataset - the dataset we're using (probably test set)
+		# 	TO DO : 
+		# 	Consider providing some uncertainty here by taking n samples (like nb_MC = 10 in Tanya's BUnet)
+
+		# Dataset initialization 
 		test_set = Dataset(dataset, self.config, mode='test', augment=True)
 		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
@@ -2148,7 +2208,7 @@ class MaskRCNN(nn.Module):
 
 			# First stack slices to make the input image
 			image = np.stack([t2, unc, netseg], axis = 0)
-			print("{}-th brain...".format(i+1))
+			print("Brain number {}...".format(i+1))
 			for slice_idx in range(t2.shape[2]):#image.shape[3]
 				# For each input, get boxes, masks, scores, etc.
 				results = model.detect([image[...,slice_idx]])
@@ -2170,7 +2230,7 @@ class MaskRCNN(nn.Module):
 					b = copy.copy(gt_masks[...,slice_idx])
 
 					lesion_stats = evaluate.count_boxed_lesions(netbox=a.astype(np.float32), target=b.astype(np.int16), thresh=thr, scores=scores)
-					#print('i, j : ', i, j)
+				
 					tpr_lesions[i, j] += lesion_stats['tpr']['all']
 					fdr_lesions[i, j] += lesion_stats['fdr']['all']
 				
@@ -2183,16 +2243,9 @@ class MaskRCNN(nn.Module):
 					tpr_lesions_l[i, j] += lesion_stats['tpr']['large']
 					fdr_lesions_l[i, j] += lesion_stats['fdr']['large']
 			
-
-			print("\n tpr-lesion s :", tpr_lesions_s[i])
-			print("\n fdr-lesion s :", fdr_lesions_s[i])
-			print("\n tpr-lesion m :", tpr_lesions_m[i])
-			print("\n fdr-lesion m :", fdr_lesions_m[i])
-			print("\n tpr-lesion l :", tpr_lesions_l[i])
-			print("\n fdr-lesion l :", fdr_lesions_l[i])
 			i +=1
 		
-		#print("\n fdr-lesion s :", fdr_lesions_s)
+		# The rate should then be averaged per slice to get a good idea of the per slice performance
 		tpr_lesions = tpr_lesions / t2.shape[2]
 		fdr_lesions = fdr_lesions / t2.shape[2]
 				
@@ -2205,6 +2258,7 @@ class MaskRCNN(nn.Module):
 		tpr_lesions_l = tpr_lesions_l / t2.shape[2]
 		fdr_lesions_l = fdr_lesions_l / t2.shape[2]
 
+		# The mean TPRs and FPRs across size bins are then calculated
 		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
 		tpr_lesions_mean = np.mean(tpr_lesions, axis=0)
 		
@@ -2217,9 +2271,7 @@ class MaskRCNN(nn.Module):
 		fdr_lesions_mean_l = np.mean(fdr_lesions_l, axis=0)
 		tpr_lesions_mean_l = np.mean(tpr_lesions_l, axis=0)
 
-		print("\n tpr-lesion-mean s:", tpr_lesions_mean_s)
-		print("\n fdr-lesion-mean s:", fdr_lesions_mean_s)
-
+		# Now plot the TPR vs FDR across size bins
 		fig = plt.figure()
 		ax = fig.add_subplot(1, 1, 1) 
 		plt.plot(fdr_lesions_mean, tpr_lesions_mean, label='lesion level-all')
@@ -2352,7 +2404,17 @@ class MaskRCNN(nn.Module):
 		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve_seg(by_slice).png"))
 
 
-	def evaluate_model_detection_holistic(self, dataset, logs, nb_mc=10):
+	def evaluate_model_detection_holistic(self, dataset):
+		#	Evaluate_model_detection_holistic - a lot of this function is borrowed from Nazanine/Tanya. Basically we
+		#	evaluate detection performance on a volumetric basis across the volumes in 'dataset' and then average the
+		# 	performance across volumes. We use this average to report the TPR vs FDR across size bins and plot
+		#	this result.
+		#	Inputs:
+		#	dataset - the dataset we're using (probably test set)
+		# 	TO DO : 
+		# 	Consider providing some uncertainty here by taking n samples (like nb_MC = 10 in Tanya's BUnet)
+
+		# Initialize dataset
 		test_set = Dataset(dataset, self.config, mode='test', augment=True)
 		test_generator = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 

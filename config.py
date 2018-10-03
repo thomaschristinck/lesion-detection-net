@@ -22,7 +22,7 @@ class Config(object):
 
     # Path to pretrained model
     #CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training3(t2_stack)/', "mask_rcnn_lesion_mask_rcnn_0025.pth")
-    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0100.pth")
+    CONTINUE_MODEL_PATH = os.path.join('/usr/local/data/thomasc/checkpoints/2d_detnet_training2/', "mask_rcnn_lesion_mask_rcnn_0140.pth")
     
     # NUMBER OF GPUs to use. For CPU use 0
     GPU_COUNT = 1
