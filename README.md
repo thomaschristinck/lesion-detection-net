@@ -1,12 +1,12 @@
 ===========================================
 Lesion Detection Net
 ===========================================
+
+I worked on this project under supervision of Prof. Tal Arbel ([Probabilistic Vision Group](http://www.cim.mcgill.ca/~pvg/) at [CIM](http://www.cim.mcgill.ca)). The aim was to leverage uncertainties associated with lesion segmentation masks in Multiple Sclerosis patient MRI produced by an additional network ([Nair et al.](https://link.springer.com/chapter/10.1007/978-3-030-00928-1_74)) in order to improve lesion detection accuracy. I wanted to take Mask R-CNN into 3D to better capture the relationships between tissue in neighbouring slices. Unfortunately, Mask R-CNN is a pretty big architecture that I was unable to get running in 3D. This repo is a working implementation of Mask R-CNN that can be used to detect lesions in T2 MRI; assuming a segmentation mask & associated uncertainties are provided by a previous network. Some qualitative [results](#results) are included in this Readme.
+
 This is a pytorch implementation of Mask R-CNN that is modified from multimodallearning's [pytorch-mask-rcnn](https://github.com/multimodallearning/pytorch-mask-rcnn) (a pytorch implementation) and matterport's [Mask_RCNN](https://github.com/matterport/Mask_RCNN). I also use the non-maximum suppression implementation (Faster R-CNN) from ruotianluo's [pytorch-faster-rcnn](https://github.com/ruotianluo/pytorch-faster-rcnn) and longcw's [RoiAlign](https://github.com/longcw/RoIAlign.pytorch).
 
 The Mask R-CNN paper by He et al. can be found [here](https://arxiv.org/abs/1703.06870) and the Faster R-CNN paper by Ren et al. can be found [here](https://arxiv.org/abs/1506.01497).
-
-I am also working on a 3D Implementation of this repository.
-
 
 ## Usage
 1. Clone this repository.
@@ -48,4 +48,5 @@ I am also working on a 3D Implementation of this repository.
 Training usage is:
 ```python launcher.py train --dataset=path/to/data/folder ---model=/path/to/model.pth```
 
-
+<a name="results"/>
+## Results
