@@ -39,9 +39,11 @@ def get_3D_lesion_bin(nvox):
 
 def get_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-	if 3 <= nvox <= 10:
+	#if 3 <= nvox <= 10:
+	if 3 <= nvox <=7:
 		return 'small'
-	elif 11 <= nvox <= 50:
+	#elif 11 <= nvox <= 50:
+	elif 7 < nvox <= 50:
 		return 'med'
 	elif nvox >= 51:
 		return 'large'
@@ -290,7 +292,7 @@ class Dataset(object):
 
 		if mode == 'train' or mode == 'val':
 			t2 = np.asarray(t2)[:,:,self._slice_idx]
-		
+		print('t2 image loaded in utils shape :', t2.shape)
 		return t2
 
 	def load_uncertainty(self, image_id, dataset, config, mode):

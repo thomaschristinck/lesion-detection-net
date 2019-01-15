@@ -1,7 +1,8 @@
 
 """
 Mask R-CNN
-The main Mask R-CNN model implemenetation.
+The main Mask R-CNN model implemenetation. This is somewhat modified 
+from the Matterport Mask RCNN (license below)
 
 Copyright (c) 2017 Matterport, Inc.
 Licensed under the MIT License (see LICENSE for details)
@@ -341,7 +342,8 @@ def clip_boxes(boxes, window):
 	return boxes
 
 def proposal_layer(inputs, proposal_count, nms_threshold, anchors, config=None):
-	"""Receives anchor scores and selects a subset to pass as proposals
+	"""
+	Receives anchor scores and selects a subset to pass as proposals
 	to the second stage. Filtering is done based on anchor scores and
 	non-max suppression to remove overlaps. It also applies bounding
 	box refinment detals to anchors.
@@ -391,12 +393,11 @@ def proposal_layer(inputs, proposal_count, nms_threshold, anchors, config=None):
 	# for small objects, so we're skipping it.
 
 	# Non-max suppression
-	print("Boxes before nms : ", boxes.shape)
-	#keep = nms(torch.cat((boxes, scores.unsqueeze(1)), 1).data, nms_threshold)
-	keep = box_nms(boxes, scores, nms_threshold)
+
+	keep = nms(torch.cat((boxes, scores.unsqueeze(1)), 1).data, nms_threshold)
+	#keep = box_nms(boxes, scores, nms_threshold)
 	keep = keep[:proposal_count]
 	boxes = boxes[keep, :]
-	print("Boxes after nms : ", boxes.shape)
 
 	# Normalize dimensions to range of 0 to 1.
 	norm = Variable(torch.from_numpy(np.array([height, width, height, width])).float(), requires_grad=False)
@@ -439,12 +440,9 @@ def box_nms(bboxes, scores, threshold=0.5):
         if order.numel() == 1:
             break
 
-        print('x1 order :', x1.data)
-        print('min index :', (int)(i.data.cpu().numpy()))
+  
         x = x1.data.cpu()
         h = (int)(i.data.cpu().numpy())
-        print('min index 2 :', x1[h].data.cpu().numpy())
-        print('min index :', x1[0])
         xx1 = torch.clamp(x1[order[1:]], min=(int)(x1[h].data.cpu().numpy()))
         yy1 = torch.clamp(y1[order[1:]], min=(int)(y1[h].data.cpu().numpy()))
         xx2 = torch.clamp(x2[order[1:]], max=(int)(x2[h].data.cpu().numpy()))
@@ -459,6 +457,7 @@ def box_nms(bboxes, scores, threshold=0.5):
             break
         order = order[ids+1]
     return torch.LongTensor(keep)
+
 ############################################################
 #  ROIAlign Layer
 ############################################################
@@ -1166,32 +1165,6 @@ def compute_mrcnn_mask_loss(target_masks, target_class_ids, pred_masks):
 
 	return loss
 
-'''
-def compute_count_loss(target_count, pred_class_logits):
-	
-	#target_count: integer, the ground truth lesion count.
-	#pred_class_logits: [batch, num_rois, num_classes]
-	
-	if pred_class_logits.size():
-		roi_idx = torch.nonzero(pred_class_logits[:,1] > 0.9)
-		pred_nles = Variable(torch.Tensor([len(roi_idx)]))
-		pred_nles = pred_nles.cuda()
-	else:
-		pred_nles = Variable(torch.Tensor([0]))
-
-	if target_count.size() or (not target_count.size() and pred_nles.size()):
-		# change 0.9 to the threshold used later
-		pred_nles = pred_nles.cuda()
-
-		# Binary cross entropy
-		loss = F.smooth_l1_loss(pred_nles, target_count)
-	else:
-		loss = Variable(torch.FloatTensor([0]), requires_grad=False)
-		if target_class_ids.is_cuda:
-			loss = loss.cuda()
-
-	return loss
-'''
 
 def compute_losses(rpn_match, rpn_bbox, rpn_class_logits, rpn_pred_bbox, target_class_ids, mrcnn_class_logits, target_deltas, mrcnn_bbox, target_mask, mrcnn_mask):
 	
@@ -1436,6 +1409,7 @@ class Dataset(torch.utils.data.Dataset):
 			t2 = torch.from_numpy(t2).float()
 			unc = torch.from_numpy(unc).float()
 
+			print("Provided t2 shape: ", t2.shape)
 			return netseg, gt_masks, t2, unc
 
 		image, gt_class_ids, gt_boxes, gt_masks, image_metas, nles = \
@@ -2452,7 +2426,7 @@ class MaskRCNN(nn.Module):
 			gt_masks = gt_masks[0].numpy()
 			t2 = t2[0].numpy()
 			unc = unc[0].numpy()
-
+			
 			# We have a dict with array for each size
 			ntp = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
 			nfp = {'all': np.zeros((nb_img_valid, nb_thrs)), 'small': np.zeros((nb_img_valid, nb_thrs)), 'med': np.zeros((nb_img_valid, nb_thrs)), 'large': np.zeros((nb_img_valid, nb_thrs))}
@@ -2653,8 +2627,8 @@ class MaskRCNN(nn.Module):
 					fdr[s][i,j] = 1 - ppv
 
 
-				tpr_lesions[i, j] = tpr['all'][i,j]
-				fdr_lesions[i, j] = fdr['all'][i,j]
+				tpr_lesions[i, j] = tpr['all'][i,j] 
+				fdr_lesions[i, j] = fdr['all'][i,j] 
 
 				tpr_lesions_s[i, j] = tpr['small'][i,j]
 				fdr_lesions_s[i, j] = fdr['small'][i,j]
@@ -2665,10 +2639,10 @@ class MaskRCNN(nn.Module):
 				tpr_lesions_l[i, j] = tpr['large'][i,j]
 				fdr_lesions_l[i, j] = fdr['large'][i,j]
 			
-			print("\n tpr-lesion s :", tpr_lesions_s[i])
-			print("\n fdr-lesion s :", fdr_lesions_s[i])
-			print("\n tpr-lesion l :", tpr_lesions_l[i])
-			print("\n fdr-lesion l :", fdr_lesions_l[i])
+			#print("\n tpr-lesion s :", tpr_lesions_s[i])
+			#print("\n fdr-lesion s :", fdr_lesions_s[i])
+			#print("\n tpr-lesion l :", tpr_lesions_l[i])
+			#print("\n fdr-lesion l :", fdr_lesions_l[i])
 			i +=1
 		
 		fdr_lesions_mean = np.mean(fdr_lesions, axis=0)
@@ -2698,7 +2672,7 @@ class MaskRCNN(nn.Module):
 		plt.legend(loc="lower right")
 		plt.xlabel('fdr')
 		plt.ylabel('tpr')
-		plt.title('Segmentation Net (as per-slice boxes)')
+		plt.title('3D U-Net Segmentation (T2 Image Only)')
 		major_ticks = np.arange(0, 1, 0.1)
 		minor_ticks = np.arange(0, 1, 0.02)
 		ax.set_xticks(major_ticks)
@@ -2708,7 +2682,7 @@ class MaskRCNN(nn.Module):
 		ax.grid(which='both')
 		ax.grid(which='minor', alpha=0.2)
 		ax.grid(which='major', alpha=0.5)
-		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve_segmentation(as box by volume).png"))
+		fig.savefig(os.path.join('/usr/local/data/thomasc/outputs', "roc_curve_segmentation(unet t2 only).png"))
 	
 
 	def mold_inputs(self, images):

@@ -38,12 +38,24 @@ def random_colors(N, bright=True):
     convert to RGB.
     """
     brightness = 1.0 if bright else 0.8
-    hsv = [(0.88, 0.67, brightness) for i in range(N)]
+    hsv = [(i / N, 1, brightness) for i in range(N)]
     colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
     random.shuffle(colors)
     return colors
 
-def apply_mask(image, mask, color, alpha=0.5):
+def get_color(bright=True):
+    """
+    Generate color for labelling something we want to be a set color.
+    To get visually distinct colors, generate them in HSV space then
+    convert to RGB.
+    """
+    brightness = 1.0 if bright else 0.8
+    hsv = [(0.88, 0.67, brightness) for i in range(2)]
+    colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+    random.shuffle(colors)
+    return colors
+
+def apply_mask(image, mask, color, alpha=0.3):
     """Apply the given mask to the image.
     """
     image = np.where(mask == 1, image * (1 - alpha) + alpha * color[0] * 255, image)
@@ -230,7 +242,7 @@ def draw_unc_mask(t2, unc):
 
 def draw_boxes(image, boxes=None, refined_boxes=None,
                mask=None, gt_mask=None, captions=None, visibilities=None,
-               title="", ax=None, pn_labels=False):
+               title="", ax=None, pn_labels=False, instance_masks=False):
     """Draw bounding boxes and segmentation masks with differnt
     customizations.
 
@@ -339,8 +351,8 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
     # Two options: can display masks as one mask with one color, or can display them as
     # TPs = green, FPs = red, FNs = blue
 
-    if mask is not None and pn_labels == False:
-        colors = random_colors(2, bright=True)
+    if mask is not None and pn_labels == False and instance_masks==False:
+        colors = get_color(bright=True)
         color = colors[0]
         masked_image = apply_mask(masked_image, mask, color)
         # Mask Polygon
@@ -355,7 +367,7 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             p = Polygon(verts, facecolor=color, edgecolor=color)
             ax.add_patch(p)
 
-    elif mask is not None and pn_labels == True:
+    elif mask is not None and pn_labels == True and instance_masks==False:
             # Return a mask for each lesion instance
             gt_labels, gt_nles = ndimage.label(gt_mask)
             labels, nles = ndimage.label(mask)
@@ -415,6 +427,46 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
                     gt_mask[gt_labels == i] = 1
             else:
                 pass
+        
+    elif mask is not None and instance_masks==True:
+            # Return a mask for each lesion instance
+            labels, nles = ndimage.label(mask)
+            masks = np.zeros([nles, mask.shape[0], mask.shape[1]], dtype=np.int32)
+
+            # Check if there are no lesions
+
+            if nles == 0:
+                masks = np.zeros([1, mask.shape[0], mask.shape[1]], dtype=np.int32)
+                masks[0] = mask
+
+            # Look for all the voxels associated with a particular lesion
+
+            for i in range(1, nles + 1):
+                mask[labels != i] = 0
+                mask[labels == i] = 1
+                masks[i-1] = mask
+
+            gt_idx_list = []
+            mask_colors = random_colors(nles + 1)
+            for i in range(masks.shape[0]):
+                print("i is ", i)
+                print("mask colors shape is ", len(mask_colors))
+                masked_image = apply_mask(masked_image, masks[i], mask_colors[i])
+                # Mask Polygon
+                # Pad to ensure proper polygons for masks that touch image edges.
+                padded_mask = np.zeros(
+                    (masks[i].shape[0] + 2, masks[i].shape[1] + 2), dtype=np.uint8)
+                padded_mask[1:-1, 1:-1] = masks[i]
+                contours = find_contours(padded_mask, 0.5)
+                for verts in contours:
+                    # Subtract the padding and flip (y, x) to (x, y)
+                    verts = np.fliplr(verts) - 1
+                    p = Polygon(verts, facecolor=mask_colors[i], edgecolor=mask_colors[i])
+                    ax.add_patch(p)
+
+                for i in range(1, nles + 1):
+                    mask[labels == i] = 1
+
 
     ax.imshow(masked_image.astype(np.uint32), cmap=plt.cm.gray)
     return ax
@@ -631,11 +683,12 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', str(idx) + str(idx) + '.png'), bbox_inches='tight')
         plt.close('all')
 
-        ax[0][0] = draw_boxes(t2_slice, mask=target_slice)  
+        ax[0][0] = draw_boxes(t2_slice, mask=target_slice, instance_masks=True)  
 
         plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', 'target' + str(idx) + '.png'), bbox_inches='tight')
         plt.close('all')
 
+        #ax[0][0] = draw_boxes(t2_slice, mask=target_slice) 
         ax[0][0] = draw_unc_mask(t2_slice, unc_slice)  
 
         plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', 'unc' + str(idx) + '.png'), bbox_inches='tight')

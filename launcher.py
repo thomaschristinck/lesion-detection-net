@@ -124,7 +124,7 @@ if __name__ == '__main__':
 	parser.add_argument("command",
 						metavar="<command>",
 						help="'train' or 'evaluate'")
-	parser.add_argument('-d', '--dataset', required=True,
+	parser.add_argument('--dataset', required=True,
 						metavar="/path/to/mslaq.h5",
 						help='Directory of the dataset')
 	parser.add_argument('--model', required=False,
@@ -158,8 +158,7 @@ if __name__ == '__main__':
 
 	# Create model
  
-	model = modellib.MaskRCNN(config=config,
-								  model_dir=args.logs, thresh=0)
+	model = modellib.MaskRCNN(config=config, model_dir=args.logs, thresh=0)
 	if config.GPU_COUNT:
 		model = model.cuda()
 
@@ -237,9 +236,9 @@ if __name__ == '__main__':
 		print("Running evaluation on {} images.".format(args.limit))
 		
 		# Evaluate the model (produce TPR/FPR graphs)
-		#model.evaluate_model_segmentation_by_slice(dataset_test, args.logs)
-		#model.evaluate_model_detection(dataset_test, args.logs)
-		#model.evaluate_model_segmentation_holistic(dataset_test, args.logs)
+		model.evaluate_model_segmentation_by_slice(dataset_test, args.logs)
+		model.evaluate_model_detection(dataset_test, args.logs)
+		model.evaluate_model_segmentation_holistic(dataset_test, args.logs)
 		model.evaluate_model_detection_holistic(dataset_test)
 
 	
