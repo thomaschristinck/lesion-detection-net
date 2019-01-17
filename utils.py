@@ -37,38 +37,14 @@ def get_3D_lesion_bin(nvox):
 	else:
 		return 1
 
-def get_lesion_bin(nvox):
-	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-	#if 3 <= nvox <= 10:
-	if 3 <= nvox <=7:
-		return 'small'
-	#elif 11 <= nvox <= 50:
-	elif 7 < nvox <= 50:
-		return 'med'
-	elif nvox >= 51:
-		return 'large'
-	else:
-		return 'small'
-
 def get_box_lesion_bin(nvox):
 	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
+	# This is the box version of size bins for segmented lesions
 	if 3 <= nvox <= 100:
 		return 'small'
 	elif 100 < nvox <= 225:
 		return 'med'
 	elif nvox > 225:
-		return 'large'
-	else:
-		return 'small'
-
-
-def get_box_lesion_bin_gen(nvox):
-	# Lesion bin - 0 for small lesions, 1 for medium, 2 for large
-	if 3 <= nvox <= 135:
-		return 'small'
-	elif 135 < nvox <= 300:
-		return 'med'
-	elif nvox > 300:
 		return 'large'
 	else:
 		return 'small'

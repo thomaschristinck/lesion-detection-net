@@ -21,6 +21,9 @@ from scipy import ndimage
 from launcher import MSDataset
 from config import Config
 
+# A script to demo everything - unfortunately the data used for this project
+# cannot be shared so this is pretty much useless
+
 # Root directory of the project
 ROOT_DIR = os.getcwd()
 
@@ -62,8 +65,6 @@ class_names = ['BG', 'lesion']
 # Load a random image from the images folder
 file_names = sorted(os.listdir(IMAGE_DIR))
 index = random.randint(15,20)
-#10, 15 is good
-
 
 # Get index of each image
 bbox_idx = (index // 6) * 6
@@ -88,42 +89,6 @@ threshed = np.asarray(threshed)
 
 threshed, _ = utils.remove_tiny_les(threshed, nvox=2)
 target, _ = utils.remove_tiny_les(target, nvox=2)
-'''
-
-gt_idx = (index // 5) * 5
-netseg_idx = (index // 5) * 5 + 1 
-out_idx = (index // 5) * 5 + 2
-t2_idx = (index // 5) * 5 + 3
-unc_idx = (index // 5) * 5 + 4
-
-
-netseg, opts = nrrd.read(join(IMAGE_DIR, file_names[netseg_idx]))
-t2, opts = nrrd.read(join(IMAGE_DIR, file_names[t2_idx]))
-target, opts = nrrd.read(join(IMAGE_DIR, file_names[gt_idx]))
-unc, opts = nrrd.read(join(IMAGE_DIR, file_names[unc_idx]))
-out, opts = nrrd.read(join(IMAGE_DIR, file_names[out_idx]))
-
-print('idx t2 : ', t2_idx)
-print('idx netseg : ', netseg_idx)
-print('idx gt  : ', gt_idx)
-print('idx unc : ', unc_idx)
-print('idx out : ', out_idx)
-
-print('File being viewed : ', join(IMAGE_DIR, file_names[t2_idx]))
-print('File being viewed : ', join(IMAGE_DIR, file_names[netseg_idx]))
-print('File being viewed : ', join(IMAGE_DIR, file_names[gt_idx]))
-print('File being viewed : ', join(IMAGE_DIR, file_names[unc_idx]))
-print('File being viewed : ', join(IMAGE_DIR, file_names[out_idx]))
-
-netseg = np.asarray(netseg)
-t2 = np.asarray(t2)
-target = np.asarray(target)
-unc = np.asarray(unc)
-out = np.asarray(out)
-'''
-
-#netseg, _ = utils.remove_tiny_les(netseg, nvox=2)
-#target, _ = utils.remove_tiny_les(target, nvox=2)
 
 # Build the 3d image to be viewed
 visualize.build_image3d(t2, target, netseg, unc, threshed, model, class_names)
