@@ -54,3 +54,4 @@ Training usage is:
 
 I was unable to compare segmentation results from Nair et al. and the detection results in this implementation in a way that is fair and so I have yet to be able to present a quantitative comparison of my results with the original. I do get some reasonably good qualitative results with this network though. An example of what the network output might look like in several brain regions is included here, with a focus on small lesions (as small lesions are much harder to detect than larger lesions).
 
+![figure 1](https://github.com/thomaschristinck/detection_net/blob/master/figures/qual_results.png)
