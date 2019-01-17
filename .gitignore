@@ -5,7 +5,7 @@
 *.pyc
 
 #Images
-*.png
+*.jpeg
 
 #Folders to ignore 
 logs/
