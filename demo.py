@@ -45,7 +45,7 @@ config = InferenceConfig()
 MODEL_PATH = config.CONTINUE_MODEL_PATH
 
 # Directory of images to run detection on
-IMAGE_DIR = os.path.join(ROOT_DIR, "images")
+IMAGE_DIR = os.path.join(ROOT_DIR, "images2")
 
 # Output directory to save roc curves etc.
 out_dir = '/usr/local/data/thomasc/logs/'
@@ -64,15 +64,16 @@ class_names = ['BG', 'lesion']
 
 # Load a random image from the images folder
 file_names = sorted(os.listdir(IMAGE_DIR))
-index = random.randint(15,20)
+index = random.randint(0,3)
 
 # Get index of each image
-bbox_idx = (index // 6) * 6
-netseg_idx = (index // 6) * 6 + 1 
-t2_idx = (index // 6) * 6 + 2
-target_idx = (index // 6) * 6 + 3
-unc_idx = (index // 6) * 6 + 4
-threshed_idx = (index // 6 ) * 6 + 5
+nb_images = 5
+t2_idx = (index // nb_images) * nb_images + 3
+netseg_idx = (index // nb_images) * nb_images + 1 
+threshed_idx = (index // nb_images) * nb_images + 2
+target_idx = (index // nb_images) * nb_images 
+unc_idx = (index // nb_images) * nb_images + 4
+
 
 netseg, opts = nrrd.read(join(IMAGE_DIR, file_names[netseg_idx]))
 t2, opts = nrrd.read(join(IMAGE_DIR, file_names[t2_idx]))
@@ -80,7 +81,11 @@ target, opts = nrrd.read(join(IMAGE_DIR, file_names[target_idx]))
 unc, opts = nrrd.read(join(IMAGE_DIR, file_names[unc_idx]))
 threshed, opts = nrrd.read(join(IMAGE_DIR, file_names[threshed_idx]))
 
-print('File being viewed : ', join(IMAGE_DIR, file_names[t2_idx]))
+print('T2 : ', join(IMAGE_DIR, file_names[t2_idx]))
+print('Netseg : ', join(IMAGE_DIR, file_names[netseg_idx]))
+print('Uncertainty : ', join(IMAGE_DIR, file_names[unc_idx]))
+print('Grount truth : ', join(IMAGE_DIR, file_names[target_idx]))
+print('Output : ', join(IMAGE_DIR, file_names[threshed_idx]))
 netseg = np.asarray(netseg)
 t2 = np.asarray(t2)
 target = np.asarray(target)

@@ -10,11 +10,19 @@ The Mask R-CNN paper by He et al. can be found [here](https://arxiv.org/abs/1703
 
 ## Usage
 1. Clone this repository.
+
 ```git clone https://github.com/thomaschristinck/detection_net```
+
 2. You'll probably have to modify the dataloader to accept whatever input images you're using. Currently set up for 192 x 192 x 64 x 3 input. Put your input files in some directory ("data_path")
+
 3. You can use the imagenet weights for now; go to "usr/local/data/thomasc/checkpoints" and copy "resnet50_imagenet.pth" to "det_net" folder.
-4. Make sure you're using pytorch0.3 (install with pip by ```pip install http://download.pytorch.org/whl/cu80/torch-0.3.1-cp35-cp35m-linux_x86_64.whl```). Eventually I might upgrade to 0.4.
-5. ```pip install -r requirements.txt```
+
+4. Make sure you're using python3 and pytorch0.3 (for linux, install with pip by ```pip install http://download.pytorch.org/whl/cu80/torch-0.3.1-cp35-cp35m-linux_x86_64.whl```). Eventually I might upgrade to 0.4.
+
+5. Install the requirements in whatever virtual environment you're using.
+
+```pip install -r requirements.txt```
+
 6.  We use two repositories (non-maximum suppression from ruotianluo's [pytorch-faster-rcnn](https://github.com/ruotianluo/pytorch-faster-rcnn) and longcw's [RoiAlign](https://github.com/longcw/RoIAlign.pytorch)) that need to be built with the right --arch option for cuda support.
 
 
@@ -52,6 +60,4 @@ Training usage is:
 
 ## Results
 
-I was unable to compare segmentation results from Nair et al. and the detection results in this implementation in a way that is fair and so I have yet to be able to present a quantitative comparison of my results with the original. I do get some reasonably good qualitative results with this network though. An example of what the network output might look like in several brain regions is included here, with a focus on small lesions (small lesions, < 10 voxels,  are typically much harder to detect than large lesions, > 50 voxels).
-
-![figure 1](https://github.com/thomaschristinck/detection_net/blob/master/figures/qual_results.png)
+I was unable to compare segmentation results from Nair et al. and the detection results in this implementation in a way that is fair and so I have yet to be able to present a quantitative comparison of my results with the original. I do get some reasonably good qualitative results with this network though. An example of what the network output might look like in several brain regions is included here, with a focus on small lesions (as small lesions are much harder to detect than larger lesions).

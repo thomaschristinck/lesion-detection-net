@@ -145,7 +145,7 @@ def draw_box(image, box, color):
     image[y1:y2, x2:x2 + 1] = color
     return image
 
-def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
+def get_mask_color(mask, gt_masks, gt_labels, gt_nles, test):
     """Draw bounding boxes and segmentation masks with differnt
     customizations.
 
@@ -174,7 +174,8 @@ def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
         hsv = [(0.38, 0.88, 0.8)]
         colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
         color = colors[0]
-        return color, gt_idx_list
+        tp_fp = 1
+        return color, gt_idx_list, tp_fp
 
     else:
         # Color mask red; it is a false positive
@@ -182,7 +183,8 @@ def get_mask_color(mask, gt_masks, gt_labels, gt_nles):
         colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
         color = colors[0]
         gt_idx_list.extend([None])
-        return color, gt_idx_list
+        tp_fp = 0
+        return color, gt_idx_list, tp_fp
 
 def get_box_color(box, gt_masks, gt_labels, gt_nles):
     # Look at box. Return label ids of gt lesions with intersect > 3 or 0.5 * lesion size
@@ -242,7 +244,7 @@ def draw_unc_mask(t2, unc):
 
 def draw_boxes(image, boxes=None, refined_boxes=None,
                mask=None, gt_mask=None, captions=None, visibilities=None,
-               title="", ax=None, pn_labels=False, instance_masks=False):
+               title="", ax=None, pn_labels=False, instance_masks=False, test=False):
     """Draw bounding boxes and segmentation masks with differnt
     customizations.
 
@@ -390,9 +392,14 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
 
             gt_idx_list = []
             for i in range(masks.shape[0]):
-                mask_color, gt_idx = get_mask_color(masks[i], gt_mask, gt_labels, gt_nles)
-                gt_idx_list.extend(gt_idx)
-                masked_image = apply_mask(masked_image, masks[i], mask_color)
+                mask_color, gt_idx, tp_fp = get_mask_color(masks[i], gt_mask, gt_labels, gt_nles, test)
+                if test == True and tp_fp == 0:
+                    print("Got one")
+                    gt_idx_list.extend(gt_idx)
+                    test = False
+                else:
+                    gt_idx_list.extend(gt_idx)
+                    masked_image = apply_mask(masked_image, masks[i], mask_color)
                 # Mask Polygon
                 # Pad to ensure proper polygons for masks that touch image edges.
                 padded_mask = np.zeros(
@@ -449,8 +456,6 @@ def draw_boxes(image, boxes=None, refined_boxes=None,
             gt_idx_list = []
             mask_colors = random_colors(nles + 1)
             for i in range(masks.shape[0]):
-                print("i is ", i)
-                print("mask colors shape is ", len(mask_colors))
                 masked_image = apply_mask(masked_image, masks[i], mask_colors[i])
                 # Mask Polygon
                 # Pad to ensure proper polygons for masks that touch image edges.
@@ -667,8 +672,8 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         # Generate bounding box slices
         if N != 0:
             assert N == masks.shape[-1] == class_ids.shape[0]
-            #ax[0][0] = draw_boxes(t2_slice, mask=netseg_slice, gt_mask=target_slice, pn_labels=True)
-            ax[0][0] = draw_boxes(t2_slice, boxes=boxes, gt_mask=target_slice, pn_labels=True)
+            ax[0][0] = draw_boxes(t2_slice, mask=netseg_slice, gt_mask=target_slice, pn_labels=True)
+            #ax[0][0] = draw_boxes(t2_slice, boxes=boxes, gt_mask=target_slice, pn_labels=True)
         else:
             ax[0][0] = draw_boxes(t2_slice) 
 
@@ -676,14 +681,14 @@ def build_image3d(t2, target, netseg, unc, threshed, model, class_names, title="
         plt.close('all')
 
         if nles_nseg > 0 or nles_gt > 0:
-            ax[0][0] = draw_boxes(t2_slice, gt_mask=target_slice, mask=threshed_slice, pn_labels=True)
+            ax[0][0] = draw_boxes(t2_slice, gt_mask=target_slice, mask=threshed_slice, pn_labels=True, test=True)
         else:
             ax[0][0] = draw_boxes(t2_slice)     
 
         plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', str(idx) + str(idx) + '.png'), bbox_inches='tight')
         plt.close('all')
 
-        ax[0][0] = draw_boxes(t2_slice, mask=target_slice, instance_masks=True)  
+        ax[0][0] = draw_boxes(t2_slice, mask=target_slice)  
 
         plt.savefig(join('/usr/local/data/thomasc/outputs/det_net', 'target' + str(idx) + '.png'), bbox_inches='tight')
         plt.close('all')
